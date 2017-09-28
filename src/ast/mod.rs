@@ -1,4 +1,5 @@
 //! The `ast` module defines the parsed form of the Mycroft language.
+mod printers;
 
 /// A `Program` contains all parts of a Mycroft program, and is the basic
 /// unit to be handed to the code generator.

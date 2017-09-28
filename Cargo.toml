@@ -5,3 +5,4 @@ authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
 
 [dependencies]
 combine = "2.5"
+error-chain = "0.11.0"

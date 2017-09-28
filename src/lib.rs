@@ -7,5 +7,9 @@
 //!
 #[macro_use]
 extern crate combine;
+#[macro_use]
+extern crate error_chain;
+
 pub mod ast;
+pub mod ir;
 pub mod parse;

@@ -1,0 +1,7 @@
+[package]
+name = "mycroft"
+version = "0.0.1"
+authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
+
+[dependencies]
+combine = "2.5"

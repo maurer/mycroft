@@ -1,14 +1,21 @@
 //! Provides parsing functions for the Mycroft language.
 use ast::*;
-use combine::{Parser, many1, many, between, sep_by};
-use combine::char::{letter, spaces, char};
+use combine::{Parser, many, between, sep_by};
+use combine::char::{letter, spaces, char, digit};
 use combine::primitives::Stream;
 
 parser! {
     fn ident[I]()(I) -> String
         where [I: Stream<Item=char>] {
-        let ident_char = letter();
-        many1(ident_char).skip(spaces())
+        let ident_char = letter().or(digit());
+        // TODO this is probably not the best way to express this, but it's
+        // not performance critical so I can fix it later  and just copy for now.
+        (letter(), many(ident_char).skip(spaces())).map(|(first, rest): (char, String)| {
+            let mut out = String::new();
+            out.push(first);
+            out.push_str(rest.as_str());
+            out
+        })
     }
 }
 

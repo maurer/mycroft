@@ -6,3 +6,8 @@ authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
 [dependencies]
 combine = "2.5"
 error-chain = "0.11.0"
+quote = "0.3"
+syn = "0.11"
+
+[dev-dependencies]
+mycroft-macros = { path = "mycroft-macros" }

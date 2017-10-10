@@ -9,7 +9,11 @@
 extern crate combine;
 #[macro_use]
 extern crate error_chain;
+#[macro_use]
+extern crate quote;
+extern crate syn;
 
 pub mod ast;
+pub mod codegen;
 pub mod ir;
 pub mod parse;

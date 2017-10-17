@@ -10,26 +10,32 @@ use test::Bencher;
 
 mycroft_program!("p(usize)");
 
-#[bench]
-fn insert_1k(b: &mut Bencher) {
+fn insert_n(n: usize, b: &mut Bencher) {
     use predicates::p::*;
+    let mut rng = Vec::new();
+    for _ in 0..n {
+        rng.push(rand::random());
+    }
     b.iter(|| {
         let mut p = Storage::new();
-        for _ in 0..1_000 {
-            p.insert(Fact { arg0: rand::random() });
+        for i in 0..n {
+            p.insert(Fact { arg0: rng[i] });
         }
         test::black_box(p)
     })
 }
 
 #[bench]
+fn insert_1k(b: &mut Bencher) {
+    insert_n(1_000, b)
+}
+
+#[bench]
 fn insert_10k(b: &mut Bencher) {
-    use predicates::p::*;
-    b.iter(|| {
-        let mut p = Storage::new();
-        for _ in 0..10_000 {
-            p.insert(Fact { arg0: rand::random() });
-        }
-        test::black_box(p)
-    })
+    insert_n(10_000, b)
+}
+
+#[bench]
+fn insert_100k(b: &mut Bencher) {
+    insert_n(100_000, b)
 }

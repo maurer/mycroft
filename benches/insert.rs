@@ -2,24 +2,25 @@
 #![feature(test)]
 extern crate mycroft;
 extern crate mycroft_macros;
+extern crate mycroft_support;
 extern crate test;
 extern crate rand;
 
 use mycroft_macros::mycroft_program;
 use test::Bencher;
 
-mycroft_program!("p(usize)");
+mycroft_program!("P(usize)");
 
 fn insert_n(n: usize, b: &mut Bencher) {
-    use predicates::p::*;
+    use mycroft_program::{Database, P};
     let mut rng = Vec::new();
     for _ in 0..n {
         rng.push(rand::random());
     }
     b.iter(|| {
-        let mut p = Storage::new();
+        let mut p = Database::new();
         for i in 0..n {
-            p.insert(Fact { arg0: rng[i] });
+            p.insert_p(P { arg0: rng[i] });
         }
         test::black_box(p)
     })

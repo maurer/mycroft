@@ -18,6 +18,15 @@ fn pred_fields(pred: &ir::Predicate) -> Vec<Ident> {
     }
 }
 
+fn is_small(type_: &str) -> bool {
+    match type_ {
+        //TODO remove u64 from this list on 32-bit systems
+        //TODO make list extensible by user programs
+        "usize" | "u64" | "u32" | "u16" | "u8" | "i64" | "i32" | "i16" | "i8" => true,
+        _ => false,
+    }
+}
+
 fn predicate_fact(pred: &ir::Predicate) -> quote::Tokens {
     let name = Ident::new(pred.name.clone());
     let types = pred.types_
@@ -30,19 +39,34 @@ fn predicate_fact(pred: &ir::Predicate) -> quote::Tokens {
     let arity = Lit::Int(pred.types_.len() as u64, IntTy::Usize);
     let mut type_stores = Vec::new();
     for (index, (type_, field_name)) in pred.types_.iter().zip(names.clone()).enumerate() {
-        let data_name = Ident::new(format!("data_{}", type_.to_lowercase()));
-        let index_lit = Lit::Int(index as u64, IntTy::Usize);
-        type_stores.push(quote! {
-            out[#index_lit] = db.#data_name.insert(self.#field_name);
-        })
+        if is_small(type_) {
+            let index_lit = Lit::Int(index as u64, IntTy::Usize);
+            type_stores.push(quote! {
+                out[#index_lit] = self.#field_name as usize;
+            });
+        } else {
+            let data_name = Ident::new(format!("data_{}", type_.to_lowercase()));
+            let index_lit = Lit::Int(index as u64, IntTy::Usize);
+            type_stores.push(quote! {
+                out[#index_lit] = _db.#data_name.insert(self.#field_name);
+            });
+        }
     }
     let mut type_loads = Vec::new();
     for (index, type_) in pred.types_.iter().enumerate() {
-        let data_name = Ident::new(format!("data_{}", type_.to_lowercase()));
-        let index_lit = Lit::Int(index as u64, IntTy::Usize);
-        type_loads.push(quote! {
-            db.#data_name.get(tuple[#index_lit]).clone()
-        })
+        if is_small(type_) {
+            let index_lit = Lit::Int(index as u64, IntTy::Usize);
+            let out_type = Ident::new(type_.clone());
+            type_loads.push(quote! {
+                tuple[#index_lit] as #out_type
+            });
+        } else {
+            let data_name = Ident::new(format!("data_{}", type_.to_lowercase()));
+            let index_lit = Lit::Int(index as u64, IntTy::Usize);
+            type_loads.push(quote! {
+                _db.#data_name.get(tuple[#index_lit]).clone()
+            })
+        }
     }
 
     let names2 = names.clone();
@@ -52,12 +76,12 @@ fn predicate_fact(pred: &ir::Predicate) -> quote::Tokens {
             #(pub #names: #types),*
         }
         impl #name2 {
-            fn from_tuple(db: &Database, tuple: &[usize]) -> Self {
+            fn from_tuple(_db: &Database, tuple: &[usize]) -> Self {
                 Self {
                     #(#names2: #type_loads),*
                 }
             }
-            fn to_tuple(self, db: &mut Database) -> [usize; #arity] {
+            fn to_tuple(self, _db: &mut Database) -> [usize; #arity] {
                 let mut out = [0; #arity2];
                 #(#type_stores)*
                 out
@@ -103,6 +127,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     }
     let data_type_names = type_set
         .iter()
+        .filter(|x| !is_small(x))
         .map(|type_name| {
             Ident::new(format!("data_{}", type_name.to_lowercase()))
         })
@@ -110,6 +135,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     let data_type_names2 = data_type_names.clone();
     let type_names = type_set
         .into_iter()
+        .filter(|type_| !is_small(type_))
         .map(|type_name| Ident::new(type_name))
         .collect::<Vec<_>>();
 

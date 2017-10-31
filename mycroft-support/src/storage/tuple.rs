@@ -1,6 +1,24 @@
+use index::hash::{HashIndex, CheckIndex};
+
 pub struct Tuples {
-    /// Row,
     inner: Vec<Vec<usize>>,
+    index: HashIndex<[usize]>,
+}
+
+pub struct Rows<'a> {
+    inner: &'a Vec<Vec<usize>>,
+}
+
+impl<'a> CheckIndex<[usize]> for Rows<'a> {
+    fn check_index(&self, index: usize, row: &[usize]) -> bool {
+        assert!(row.len() == self.inner.len());
+        for col in 0..row.len() {
+            if self.inner[col][index] != row[col] {
+                return false
+            }
+        }
+        return true
+    }
 }
 
 impl Tuples {
@@ -21,7 +39,10 @@ impl Tuples {
         for _ in 0..arity {
             inner.push(Vec::new());
         }
-        Tuples { inner: inner }
+        Tuples {
+            inner: inner,
+            index: HashIndex::new(),
+        }
     }
     pub fn arity(&self) -> usize {
         self.inner.len()
@@ -33,16 +54,7 @@ impl Tuples {
     pub fn find(&self, needle: &[usize]) -> Option<usize> {
         assert_eq!(needle.len(), self.arity());
         debug_assert!(self.integrity());
-        // TODO: Once I add indexes, place a default index in tuples to speed this up
-        'rows: for row in 0..self.len() {
-            for col in 0..needle.len() {
-                if self.inner[col][row] != needle[col] {
-                    continue 'rows;
-                }
-            }
-            return Some(row);
-        }
-        None
+        self.index.find(needle, &Rows {inner: &self.inner})
     }
     pub fn insert(&mut self, val: &[usize]) -> (usize, bool) {
         match self.find(&val) {
@@ -50,10 +62,12 @@ impl Tuples {
             None => {
                 assert_eq!(val.len(), self.arity());
                 debug_assert!(self.integrity());
+                let key = self.len();
+                self.index.insert(key, val);
                 for (col, new_val) in self.inner.iter_mut().zip(val.into_iter()) {
                     col.push(*new_val)
                 }
-                (self.len() - 1, true)
+                (key, true)
             }
         }
     }

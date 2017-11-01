@@ -76,11 +76,13 @@ fn predicate_fact(pred: &ir::Predicate) -> quote::Tokens {
             #(pub #names: #types),*
         }
         impl #name2 {
+            #[allow(dead_code)]
             fn from_tuple(_db: &Database, tuple: &[usize]) -> Self {
                 Self {
                     #(#names2: #type_loads),*
                 }
             }
+            #[allow(dead_code)]
             fn to_tuple(self, _db: &mut Database) -> [usize; #arity] {
                 let mut out = [0; #arity2];
                 #(#type_stores)*
@@ -148,6 +150,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     // in the same module.
     quote! {
        mod mycroft_program {
+            #[allow(unused_imports)]
             use mycroft_support::storage::{Tuples, Data};
             pub struct Database {
                 #(#pred_names: Tuples),*,

@@ -33,6 +33,17 @@ impl Tuples {
         }
         return true;
     }
+    pub fn projection(&self, fields: &[usize]) -> Vec<Vec<usize>> {
+        let mut out = Vec::new();
+        for i in 0..self.len() {
+            let mut row = Vec::new();
+            for field in fields.iter() {
+                row.push(self.inner[*field][i]);
+            }
+            out.push(row);
+        }
+        out
+    }
     pub fn new(arity: usize) -> Self {
         assert!(arity > 0);
         let mut inner = Vec::new();

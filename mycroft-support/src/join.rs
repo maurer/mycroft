@@ -9,8 +9,8 @@ pub trait SkipIterator {
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash)]
 pub struct Field {
-    clause: usize,
-    field: usize,
+    pub clause: usize,
+    pub field: usize,
 }
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash)]
@@ -163,6 +163,7 @@ pub struct TrivialIterator {
 impl TrivialIterator {
     pub fn new(mut payload: Vec<Vec<usize>>) -> Self {
         payload.sort();
+        payload.dedup();
         TrivialIterator {
             payload: payload,
             loc: 0,

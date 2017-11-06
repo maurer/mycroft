@@ -1,41 +1,72 @@
 use std::fmt::{Display, Formatter, Error};
 use ast::*;
 
-fn comma_sep<T: Display>(mult: &Vec<T>, f: &mut Formatter) -> Result<(), Error> {
+fn sep_by<T: Display>(sep: &str, mult: &Vec<T>, f: &mut Formatter) -> Result<(), Error> {
     for (idx, v) in mult.iter().enumerate() {
         write!(f, "{}", v)?;
         if idx != mult.len() - 1 {
-            write!(f, ", ")?;
+            write!(f, "{}", sep)?;
         }
     }
     Ok(())
 }
 
-impl Display for NamedField {
+impl<T: Display> Display for NamedField<T> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        write!(f, "{}: {}", self.name, self.type_)
+        write!(f, "{}: {}", self.name, self.val)
     }
 }
 
-impl Display for Fields {
+impl<T: Display> Display for Fields<T> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match *self {
             Fields::Ordered(ref types_) => {
                 write!(f, "(")?;
-                comma_sep(types_, f)?;
+                sep_by(", ", types_, f)?;
                 write!(f, ")")
             }
             Fields::Named(ref fields) => {
                 write!(f, "{{")?;
-                comma_sep(fields, f)?;
+                sep_by(", ", fields, f)?;
                 write!(f, "}}")
             }
         }
     }
 }
 
+impl Display for Match {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match *self {
+            Match::Var(ref var) => write!(f, "{}", var),
+            Match::Const(ref k) => write!(f, "~{}", k),
+            Match::Unbound => write!(f, "_")
+        }
+    }
+}
+
+impl Display for Clause {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "{}{}", self.pred_name, self.matches)
+    }
+}
+
 impl Display for Predicate {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(f, "{}{}", self.name, self.fields)
+    }
+}
+
+impl Display for Query {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "?{}: ", self.name)?;
+        sep_by(" & ", &self.clauses, f)
+    }
+}
+
+impl Display for Program {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        sep_by("\n", &self.predicates, f)?;
+        write!(f, "\n")?;
+        sep_by("\n", &self.queries, f)
     }
 }

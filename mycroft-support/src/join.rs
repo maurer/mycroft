@@ -3,7 +3,6 @@ type Tuple = Vec<usize>;
 pub trait SkipIterator {
     fn next(&mut self) -> Option<Tuple>;
     fn skip(&mut self, min: Tuple);
-    fn rewind(&mut self);
     fn arity(&self) -> usize;
 }
 
@@ -50,8 +49,8 @@ impl Restrict {
 }
 
 
-pub struct Join {
-    indices: Vec<Box<SkipIterator>>,
+pub struct Join<'a> {
+    indices: Vec<&'a mut SkipIterator>,
     restricts: HashMap<Field, Restrict>,
     candidate: Vec<usize>,
     candidate_len: Vec<usize>,
@@ -76,8 +75,8 @@ fn min_possible(
     out
 }
 
-impl Join {
-    pub fn new(indices: Vec<Box<SkipIterator>>, restricts: HashMap<Field, Restrict>) -> Self {
+impl <'a> Join<'a> {
+    pub fn new(indices: Vec<&'a mut SkipIterator>, restricts: HashMap<Field, Restrict>) -> Self {
         let mut join = Join {
             indices: indices,
             restricts: restricts,
@@ -89,8 +88,6 @@ impl Join {
     }
     fn left(&mut self) {
         self.candidate.truncate(self.candidate_len.pop().unwrap());
-        let n = self.candidate_len.len();
-        self.indices[n].rewind();
         self.candidate.truncate(self.candidate_len.pop().unwrap());
     }
 
@@ -100,7 +97,7 @@ impl Join {
         self.indices[n].skip(min_possible(&self.candidate, &self.restricts, n, arity));
     }
 }
-impl Iterator for Join {
+impl <'a> Iterator for Join<'a> {
     type Item = Tuple;
     fn next(&mut self) -> Option<Self::Item> {
         // Join invariants:
@@ -181,12 +178,10 @@ impl SkipIterator for TrivialIterator {
         }
     }
     fn skip(&mut self, min: Tuple) {
+        self.loc = 0;
         while (self.payload.len() > self.loc) && (self.payload[self.loc] < min) {
             self.loc = self.loc + 1;
         }
-    }
-    fn rewind(&mut self) {
-        self.loc = 0;
     }
     fn arity(&self) -> usize {
         self.payload[0].len()
@@ -200,9 +195,9 @@ mod test {
 
     #[test]
     fn simple_join() {
-        let p = TrivialIterator::new(vec![vec![0, 2, 3], vec![3, 2, 5], vec![4, 4, 4]]);
-        let q = TrivialIterator::new(vec![vec![1, 3], vec![2, 7], vec![3, 4], vec![8, 2]]);
-        let its: Vec<Box<SkipIterator>> = vec![Box::new(p), Box::new(q)];
+        let mut p = TrivialIterator::new(vec![vec![0, 2, 3], vec![3, 2, 5], vec![4, 4, 4]]);
+        let mut q = TrivialIterator::new(vec![vec![1, 3], vec![2, 7], vec![3, 4], vec![8, 2]]);
+        let its: Vec<&mut SkipIterator> = vec![&mut p, &mut q];
         let mut restricts = HashMap::new();
         restricts.insert(
             Field {

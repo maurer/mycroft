@@ -127,7 +127,7 @@ fn predicate_insert(pred: &ir::Predicate) -> quote::Tokens {
 }
 
 
-fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> (quote::Tokens, quote::Tokens) {
+fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> (quote::Tokens, quote::Tokens, quote::Tokens) {
     let query_name = Ident::new(format!("query_{}", query.name.to_lowercase()));
     let query_result = Ident::new(format!("{}Result", query.name));
     let query_result2 = query_result.clone();
@@ -145,15 +145,30 @@ fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> (quot
         .iter()
         .map(|ty| Ident::new(ty.clone()))
         .collect::<Vec<_>>();
+    let mut proj_preds = Vec::new();
+    let mut proj_nums = Vec::new();
     let build_indices = query.gao.iter().enumerate().map(|(pred_id, sub)| {
-        let nums = sub.iter().map(|n| {
+        let raw_nums = sub.iter().map(|n| {
             Lit::Int(*n as u64, IntTy::Usize)
         }).collect::<Vec<_>>();
+        let nums = quote! { &[#(#raw_nums),*] };
+        proj_nums.push(nums.clone());
         let pred_name = Ident::new(format!("pred_{}", query.predicates[pred_id].to_lowercase()));
+        proj_preds.push(pred_name.clone());
+        let proj_i = Ident::new(format!("proj_{}", pred_id));
+        let proj_i_2 = proj_i.clone();
+        let iter_i = Ident::new(format!("iter_{}", pred_id));
         quote! {
-            Box::new(TrivialIterator::new(self.#pred_name.projection(&[#(#nums),*])))
+            let #proj_i = self.#pred_name.projection(#nums);
+            let mut #iter_i = #proj_i_2.skip_iter();
         }
     }).collect::<Vec<_>>();
+    let push_indices = {
+        let iter_is = query.gao.iter().enumerate().map(|(pred_id, _)| Ident::new(format!("iter_{}", pred_id))).collect::<Vec<_>>();
+        quote! {
+            #(indices.push(&mut #iter_is);)*
+        }
+    };
     let restricts = {
         let mut fields = Vec::new();
         let mut restricts = Vec::new();
@@ -209,11 +224,14 @@ fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> (quot
     }, quote! {
         pub fn #query_name(&self) -> Vec<#query_result3> {
             use mycroft_support::join::Restrict;
-            let mut indices: Vec<Box<SkipIterator>> = Vec::new();
-            #(indices.push(#build_indices);)*
+            #(#build_indices;)*
+            let mut indices: Vec<&mut SkipIterator> = Vec::new();
+            #push_indices
             let restricts = #restricts;
             Join::new(indices, restricts).map(|tup| #query_result4::from_tuple(self, tup)).collect()
         }
+    }, quote! {
+        #(db.#proj_preds.register_projection(#proj_nums);)*
     })
 }
 
@@ -230,11 +248,13 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         .collect::<Vec<_>>();
     let mut query_structs = Vec::new();
     let mut query_funcs = Vec::new();
-    for (query_struct, query_func) in prog.queries
+    let mut query_registrations = Vec::new();
+    for (query_struct, query_func, query_registration) in prog.queries
         .values()
         .map(|query| query_gen(query, &prog.predicates)) {
             query_structs.push(query_struct);
             query_funcs.push(query_func);
+            query_registrations.push(query_registration)
         }
     let pred_names = prog.predicates
         .keys()
@@ -283,10 +303,12 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             #(#query_structs)*
             impl Database {
                 pub fn new() -> Self {
-                    Self {
+                    let mut db = Self {
                         #(#pred_names2: Tuples::new(#arities)),*,
                         #(#data_type_names2: Data::new()),*
-                    }
+                    };
+                    #(#query_registrations)*
+                    db
                 }
                 #(#pred_inserts)*
                 #(#query_funcs)*

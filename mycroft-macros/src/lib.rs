@@ -1,3 +1,5 @@
+//! `mycroft-macros` exports the nightly-only procedural macro interface to the mycroft compiler.
+//! To use it, invoke `mycroft_program! { "MYCROFT CODE HERE" }` in your library.
 #![feature(proc_macro)]
 extern crate proc_macro;
 extern crate mycroft;
@@ -13,6 +15,7 @@ fn input_explanation<T, R>(_: R) -> T {
 }
 
 #[proc_macro]
+/// Transforms a mycroft program into a module by invoking the mycroft compiler.
 pub fn mycroft_program(input: TokenStream) -> TokenStream {
     let expr = syn::parse_expr(&input.to_string()).unwrap_or_else(input_explanation);
     let prog_str = match expr.node {

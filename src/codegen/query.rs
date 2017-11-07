@@ -385,7 +385,7 @@ fn gen_incr(
                 #build_all_subjoins
                 #first_subjoin#(.chain(#rest_subjoin))*
                     .map(|tup| #query_result2::from_tuple(self, tup)).collect()
-            } 
+            }
         },
         quote! {
             #(db.#query_store.mailboxes.push(db.#tuples.register_mailbox(#perms));)*

@@ -5,33 +5,38 @@ use ir;
 use syn::{Ident, Lit, IntTy};
 use quote;
 use super::typed;
-fn fields(pred: &ir::Predicate) -> Vec<Ident> {
-    match pred.names {
-        Some(ref names) => names.iter().cloned().map(Ident::new).collect(),
-        None => {
-            pred.types
-                .iter()
-                .enumerate()
-                .map(|x| Ident::new(format!("arg{}", x.0)))
-                .collect()
+
+pub mod names {
+    use ir;
+    use syn::Ident;
+    pub fn fields(pred: &ir::Predicate) -> Vec<Ident> {
+        match pred.names {
+            Some(ref names) => names.iter().cloned().map(Ident::new).collect(),
+            None => {
+                pred.types
+                    .iter()
+                    .enumerate()
+                    .map(|x| Ident::new(format!("arg{}", x.0)))
+                    .collect()
+            }
         }
+    }
+
+    pub fn fact(pred: &ir::Predicate) -> Ident {
+        Ident::new(pred.name.clone())
+    }
+
+    pub fn insert(pred: &ir::Predicate) -> Ident {
+        Ident::new(format!("insert_{}", pred.name.to_lowercase()))
+    }
+
+    pub fn tuple(pred: &ir::Predicate) -> Ident {
+        Ident::new(format!("pred_{}", pred.name.to_lowercase()))
     }
 }
 
-fn fact_name(pred: &ir::Predicate) -> Ident {
-    Ident::new(pred.name.clone())
-}
-
-fn insert_name(pred: &ir::Predicate) -> Ident {
-    Ident::new(format!("insert_{}", pred.name.to_lowercase()))
-}
-
-pub fn tuple_name(pred: &ir::Predicate) -> Ident {
-    Ident::new(format!("pred_{}", pred.name.to_lowercase()))
-}
-
 pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
-    let fact_name = fact_name(pred);
+    let fact_name = names::fact(pred);
     let fact_name2 = fact_name.clone();
 
     let field_types = pred.types
@@ -40,7 +45,7 @@ pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
         .map(Ident::new)
         .collect::<Vec<_>>();
 
-    let field_names = fields(pred);
+    let field_names = names::fields(pred);
     let field_names2 = field_names.clone();
 
     let arity = Lit::Int(pred.types.len() as u64, IntTy::Usize);
@@ -83,9 +88,9 @@ pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
 }
 
 pub fn insert(pred: &ir::Predicate) -> quote::Tokens {
-    let insert_name = insert_name(pred);
-    let fact_name = fact_name(pred);
-    let tuple_name = tuple_name(pred);
+    let insert_name = names::insert(pred);
+    let fact_name = names::fact(pred);
+    let tuple_name = names::tuple(pred);
     quote! {
         pub fn #insert_name(&mut self, fact: #fact_name) -> usize {
             let tuple = fact.to_tuple(self);

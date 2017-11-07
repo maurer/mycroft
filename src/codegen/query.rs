@@ -4,62 +4,69 @@ use quote;
 use super::{typed, predicate};
 use std::collections::HashMap;
 
+pub mod names {
+    use ir;
+    use syn::Ident;
+    use super::super::predicate;
+    use std::collections::HashMap;
+
+    pub fn store(query: &ir::Query) -> Ident {
+        Ident::new(format!("query_storage_{}", query.name.to_lowercase()))
+    }
+
+    pub fn func(query: &ir::Query) -> Ident {
+        Ident::new(format!("query_{}", query.name.to_lowercase()))
+    }
+
+    pub fn incr_func(query: &ir::Query) -> Ident {
+        Ident::new(format!("query_incr_{}", query.name.to_lowercase()))
+    }
+
+    pub fn result(query: &ir::Query) -> Ident {
+        Ident::new(format!("{}Result", query.name))
+    }
+
+    pub fn tuple(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Vec<Ident> {
+        query
+            .predicates
+            .iter()
+            .map(|pred_name| predicate::names::tuple(&preds[pred_name]))
+            .collect()
+    }
+
+    pub fn proj(id: usize) -> Ident {
+        Ident::new(format!("proj_{}", id))
+    }
+
+    pub fn idx(id: usize) -> Ident {
+        Ident::new(format!("iter_{}", id))
+    }
+
+    pub fn subjoin_mailbox(id: usize) -> Ident {
+        Ident::new(format!("subjoin_mailbox_{}", id))
+    }
+
+    pub fn subjoin_proj(id: usize) -> Ident {
+        Ident::new(format!("subjoin_proj_{}", id))
+    }
+
+    pub fn subjoin(id: usize) -> Ident {
+        Ident::new(format!("subjoin_{}", id))
+    }
+
+    pub fn subjoin_indices(id: usize) -> Ident {
+        Ident::new(format!("subjoin_indices_{}", id))
+    }
+
+    pub fn subjoin_idx(id: usize, sub: usize) -> Ident {
+        Ident::new(format!("subjoin_idx_{}_{}", id, sub))
+    }
+}
+
 pub struct QueryOut {
     pub init: quote::Tokens,
     pub impls: quote::Tokens,
     pub decls: quote::Tokens,
-}
-
-pub fn store_name(query: &ir::Query) -> Ident {
-    Ident::new(format!("query_storage_{}", query.name.to_lowercase()))
-}
-
-fn func_name(query: &ir::Query) -> Ident {
-    Ident::new(format!("query_{}", query.name.to_lowercase()))
-}
-
-fn incr_func_name(query: &ir::Query) -> Ident {
-    Ident::new(format!("query_incr_{}", query.name.to_lowercase()))
-}
-
-fn result_name(query: &ir::Query) -> Ident {
-    Ident::new(format!("{}Result", query.name))
-}
-
-fn tuple_names(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Vec<Ident> {
-    query
-        .predicates
-        .iter()
-        .map(|pred_name| predicate::tuple_name(&preds[pred_name]))
-        .collect()
-}
-
-fn proj_name(id: usize) -> Ident {
-    Ident::new(format!("proj_{}", id))
-}
-
-fn idx_name(id: usize) -> Ident {
-    Ident::new(format!("iter_{}", id))
-}
-
-fn subjoin_mailbox_name(id: usize) -> Ident {
-    Ident::new(format!("subjoin_mailbox_{}", id))
-}
-
-fn subjoin_proj_name(id: usize) -> Ident {
-    Ident::new(format!("subjoin_proj_{}", id))
-}
-
-fn subjoin_name(id: usize) -> Ident {
-    Ident::new(format!("subjoin_{}", id))
-}
-
-fn subjoin_indices_name(id: usize) -> Ident {
-    Ident::new(format!("subjoin_indices_{}", id))
-}
-
-fn subjoin_idx_name(id: usize, sub: usize) -> Ident {
-    Ident::new(format!("subjoin_idx_{}_{}", id, sub))
 }
 
 fn build_projs(
@@ -77,8 +84,8 @@ fn build_projs(
                 .collect::<Vec<_>>();
             let nums = quote! { &[#(#raw_nums),*] };
             proj_nums.push(nums.clone());
-            let pred_name = predicate::tuple_name(&preds[&query.predicates[pred_id]]);
-            let proj_i = proj_name(pred_id);
+            let pred_name = predicate::names::tuple(&preds[&query.predicates[pred_id]]);
+            let proj_i = names::proj(pred_id);
             quote! {
                 let #proj_i = self.#pred_name.projection(#nums);
             }
@@ -98,8 +105,8 @@ fn build_idxs(query: &ir::Query) -> quote::Tokens {
         .iter()
         .enumerate()
         .map(|(pred_id, _)| {
-            let proj_i = proj_name(pred_id);
-            let iter_i = idx_name(pred_id);
+            let proj_i = names::proj(pred_id);
+            let iter_i = names::idx(pred_id);
             quote! {
                 let mut #iter_i = #proj_i.skip_iter();
             }
@@ -154,7 +161,7 @@ fn restricts(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> quote
 }
 
 fn decls(query: &ir::Query) -> quote::Tokens {
-    let result = result_name(query);
+    let result = names::result(query);
     let result2 = result.clone();
 
     let mut vars = Vec::new();
@@ -186,7 +193,7 @@ fn gen_push_indices(query: &ir::Query) -> quote::Tokens {
         .gao
         .iter()
         .enumerate()
-        .map(|(pred_id, _)| idx_name(pred_id))
+        .map(|(pred_id, _)| names::idx(pred_id))
         .collect::<Vec<_>>();
     quote! {
         #(indices.push(&mut #iter_is);)*
@@ -197,16 +204,16 @@ fn gen_query(
     query: &ir::Query,
     preds: &HashMap<String, ir::Predicate>,
 ) -> (quote::Tokens, quote::Tokens) {
-    let result = result_name(query);
+    let result = names::result(query);
     let result2 = result.clone();
 
     let (build_projs, proj_nums) = build_projs(query, preds);
     let build_idxs = build_idxs(query);
     let push_indices = gen_push_indices(query);
-    let query_func = func_name(query);
-    let query_store = store_name(query);
+    let query_func = names::func(query);
+    let query_store = names::store(query);
     let query_store2 = query_store.clone();
-    let tuples = tuple_names(query, preds);
+    let tuples = names::tuple(query, preds);
     let restricts = restricts(query, preds);
     (
         quote! {
@@ -230,14 +237,14 @@ fn gen_push_incr_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
     let mut push_idxs = Vec::new();
     {
         for sub in 0..query.predicates.len() {
-            let subjoin_indices = subjoin_indices_name(pred_id);
+            let subjoin_indices = names::subjoin_indices(pred_id);
             if pred_id == sub {
-                let subjoin_mailbox = subjoin_mailbox_name(pred_id);
+                let subjoin_mailbox = names::subjoin_mailbox(pred_id);
                 push_idxs.push(quote! {
                         #subjoin_indices.push(&mut #subjoin_mailbox);
                     })
             } else {
-                let subjoin_idx_name = subjoin_idx_name(pred_id, sub);
+                let subjoin_idx_name = names::subjoin_idx(pred_id, sub);
                 push_idxs.push(quote! {
                     #subjoin_indices.push(&mut #subjoin_idx_name);
                 })
@@ -255,8 +262,8 @@ fn gen_subjoin_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
         if pred_id == sub {
             continue;
         }
-        let subjoin_idx = subjoin_idx_name(pred_id, sub);
-        let proj = proj_name(sub);
+        let subjoin_idx = names::subjoin_idx(pred_id, sub);
+        let proj = names::proj(sub);
         build_subjoin_idxs.push(quote! {
             let mut #subjoin_idx = #proj.skip_iter();
         });
@@ -275,20 +282,20 @@ fn gen_incr(
     // well to generate additional permutation/restriction combos - that logic doesn't belong
     // in the code generator.
 
-    let query_result = result_name(query);
+    let query_result = names::result(query);
     let query_result2 = query_result.clone();
 
-    let query_incr_func = incr_func_name(query);
+    let query_incr_func = names::incr_func(query);
 
     let mut subjoin_names = Vec::new();
 
     let query_store = query
         .predicates
         .iter()
-        .map(|_| store_name(query))
+        .map(|_| names::store(query))
         .collect::<Vec<_>>();
 
-    let tuples = tuple_names(query, preds);
+    let tuples = names::tuple(query, preds);
 
     let (build_base_projs, perms) = build_projs(query, preds);
 
@@ -296,16 +303,16 @@ fn gen_incr(
         let mut build_subjoins = Vec::new();
         let mut build_subproj = Vec::new();
         for (idx, tuple) in tuples.iter().enumerate() {
-            let subjoin_proj_name = subjoin_proj_name(idx);
+            let subjoin_proj_name = names::subjoin_proj(idx);
             let subjoin_proj_name2 = subjoin_proj_name.clone();
-            let subjoin_mailbox = subjoin_mailbox_name(idx);
-            let subjoin_name = subjoin_name(idx);
+            let subjoin_mailbox = names::subjoin_mailbox(idx);
+            let subjoin_name = names::subjoin(idx);
             let build_subjoin_idxs = gen_subjoin_indices(query, idx);
             let push_idxs = gen_push_incr_indices(query, idx);
-            let query_store = store_name(query);
+            let query_store = names::store(query);
             let query_store2 = query_store.clone();
             subjoin_names.push(subjoin_name.clone());
-            let subjoin_indices = subjoin_indices_name(idx);
+            let subjoin_indices = names::subjoin_indices(idx);
             let subjoin_indices2 = subjoin_indices.clone();
             let idx = Lit::Int(idx as u64, IntTy::Usize);
             build_subproj.push(quote! {

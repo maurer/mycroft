@@ -33,7 +33,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     }
     let pred_names = prog.predicates
         .values()
-        .map(predicate::tuple_name)
+        .map(predicate::names::tuple)
         .collect::<Vec<_>>();
     let pred_names2 = pred_names.clone();
 
@@ -57,7 +57,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     let query_storage_names = prog.queries
         .values()
-        .map(query::store_name)
+        .map(query::names::store)
         .collect::<Vec<_>>();
     let query_storage_names2 = query_storage_names.clone();
 

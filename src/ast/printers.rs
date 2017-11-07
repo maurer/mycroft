@@ -39,7 +39,7 @@ impl Display for Match {
         match *self {
             Match::Var(ref var) => write!(f, "{}", var),
             Match::Const(ref k) => write!(f, "~{}", k),
-            Match::Unbound => write!(f, "_")
+            Match::Unbound => write!(f, "_"),
         }
     }
 }

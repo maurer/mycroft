@@ -315,14 +315,16 @@ fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Query
             subjoin_names.push(subjoin_name.clone());
             let idx = Lit::Int(idx as u64, IntTy::Usize);
             build_subproj.push(quote! {
-                let #subjoin_proj_name = self.#pred_name.mailbox(self.#query_store_base_0.mailboxes[#idx]);
+                let #subjoin_proj_name =
+                    self.#pred_name.mailbox(self.#query_store_base_0.mailboxes[#idx]);
             });
             build_subjoins.push(quote! {
                 let mut #subjoin_idx_name = #subjoin_proj_name2.skip_iter();
                 #(#build_subjoin_idxs;)*
                 let mut #subjoin_indices_name: Vec<&mut SkipIterator> = Vec::new();
                 #(#push_idxs;)*
-                let #subjoin_name = Join::new(#subjoin_indices_name2, &self.#query_store_base_01.restricts);
+                let #subjoin_name =
+                    Join::new(#subjoin_indices_name2, &self.#query_store_base_01.restricts);
             });
         }
         quote! {
@@ -345,22 +347,27 @@ fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Query
                 }
             }
         }
-    }, impls: quote! {
+    },
+        impls: quote! {
         pub fn #query_name(&self) -> Vec<#query_result3> {
             #(#build_indices;)*
             let mut indices: Vec<&mut SkipIterator> = Vec::new();
             #push_indices
-            Join::new(indices, &self.#query_store_base.restricts).map(|tup| #query_result4::from_tuple(self, tup)).collect()
+            Join::new(indices, &self.#query_store_base.restricts)
+                .map(|tup| #query_result4::from_tuple(self, tup)).collect()
         }
         pub fn #query_incr(&mut self) -> Vec<#query_result5> {
             #build_all_subjoins
-            #first_subjoin#(.chain(#rest_subjoin))*.map(|tup| #query_result6::from_tuple(self, tup)).collect()
+            #first_subjoin#(.chain(#rest_subjoin))*
+                .map(|tup| #query_result6::from_tuple(self, tup)).collect()
         }
-    }, init: quote! {
+    },
+        init: quote! {
         #(db.#proj_preds.register_projection(#proj_nums);)*
         #(db.#query_store.mailboxes.push(db.#proj_preds2.register_mailbox(#proj_nums2));)*
         db.#query_store_base2.restricts = #restricts;
-    }}
+    },
+    }
 }
 
 /// Transforms a complete Mycroft program in IR form into code to include in a user program

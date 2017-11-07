@@ -27,17 +27,20 @@ pub mod error {
                 description("Query uses undefined predicate"),
                 display("Predicate {:?} not defined for query {}", name, ast)
             }
-            #[doc = "A query attempts to unify two fields of different types onto the same variable"]
+            #[doc = "A query attempts to unify two fields of different types onto the same \
+                     variable"]
             QueryTypeMismatch(ast: ast::Query, var: String, type_0: String, type_1: String) {
                 description("Query unifies variable at two or more types"),
-                display("Query {} attempts to unify {} at multiple types, first {} and then {}", ast, var, type_0, type_1)
+                display("Query {} attempts to unify {} at multiple types, first {} and then {}",
+                        ast, var, type_0, type_1)
             }
             #[doc = "A clause tried to match an ordered predicate with the wrong number of fields"]
             ShortClause(pred: super::Predicate, len: usize) {
                 description("Clause had wrong field count when matching an ordered predicate"),
                 display("Tried to match {:?} with {} fields", pred, len),
             }
-            #[doc = "A clause tried to match with named fields against an ordered predicate or vice versa"]
+            #[doc = "A clause tried to match with named fields against an ordered predicate or \
+                     vice versa"]
             MatchStyle(pred: super::Predicate) {
                 description("Clause matched against with wrong style"),
                 display("Tried to match against {:?} with an incompatible style", pred)
@@ -182,8 +185,8 @@ fn permute(gao: &Vec<Vec<usize>>, qf: &QueryField) -> QueryField {
         if qf.field_id == *field {
             return QueryField {
                 pred_id: qf.pred_id,
-                field_id: idx
-            }
+                field_id: idx,
+            };
         }
     }
     panic!("GAO did not contain an entry for the provided query field")
@@ -238,7 +241,7 @@ impl Query {
                 }
             }
         }
-        
+
         // Generate the GAO
         let mut pre_gao = Vec::new();
         // First, any constant terms

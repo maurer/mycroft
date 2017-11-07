@@ -1,23 +1,9 @@
 //! `codegen` contains code related to producing Rust code with the relevant data structures.
 //! It would be difficult to avoid generating code due to type-level decisions in terms of what
 //! data structures and APIs to provide.
-use std::collections::HashMap;
 use ir;
 use quote;
 use syn::{Ident, Lit, IntTy};
-
-fn pred_fields(pred: &ir::Predicate) -> Vec<Ident> {
-    match pred.names {
-        Some(ref names) => names.iter().cloned().map(Ident::new).collect(),
-        None => {
-            pred.types
-                .iter()
-                .enumerate()
-                .map(|x| Ident::new(format!("arg{}", x.0)))
-                .collect()
-        }
-    }
-}
 
 mod typed {
     use syn::{Ident, Lit, IntTy};
@@ -65,132 +51,217 @@ mod typed {
     }
 }
 
-fn predicate_fact(pred: &ir::Predicate) -> quote::Tokens {
-    let name = Ident::new(pred.name.clone());
-    let types = pred.types
-        .iter()
-        .cloned()
-        .map(Ident::new)
-        .collect::<Vec<_>>();
-    let names = pred_fields(pred);
-    let name2 = name.clone();
-    let arity = Lit::Int(pred.types.len() as u64, IntTy::Usize);
-    let mut type_stores = Vec::new();
-    for (index, (type_, field_name)) in pred.types.iter().zip(names.clone()).enumerate() {
-        let store = typed::store(type_, quote! {self.#field_name});
-        let index_lit = Lit::Int(index as u64, IntTy::Usize);
-        type_stores.push(quote! {
-            out[#index_lit] = #store;
-        });
-    }
-    let type_loads = pred.types
-        .iter()
-        .enumerate()
-        .map(|(idx, type_)| typed::load(type_, idx))
-        .collect::<Vec<_>>();
-
-    let names2 = names.clone();
-    let arity2 = arity.clone();
-    quote! {
-        pub struct #name {
-            #(pub #names: #types),*
+mod predicate {
+    use ir;
+    use syn::{Ident, Lit, IntTy};
+    use quote;
+    use super::typed;
+    fn fields(pred: &ir::Predicate) -> Vec<Ident> {
+        match pred.names {
+            Some(ref names) => names.iter().cloned().map(Ident::new).collect(),
+            None => {
+                pred.types
+                    .iter()
+                    .enumerate()
+                    .map(|x| Ident::new(format!("arg{}", x.0)))
+                    .collect()
+            }
         }
-        impl #name2 {
-            fn from_tuple(db: &Database, tuple: &[usize]) -> Self {
-                Self {
-                    #(#names2: #type_loads),*
+    }
+
+    fn fact_name(pred: &ir::Predicate) -> Ident {
+        Ident::new(pred.name.clone())
+    }
+
+    fn insert_name(pred: &ir::Predicate) -> Ident {
+        Ident::new(format!("insert_{}", pred.name.to_lowercase()))
+    }
+
+    pub fn tuple_name(pred: &ir::Predicate) -> Ident {
+        Ident::new(format!("pred_{}", pred.name.to_lowercase()))
+    }
+
+    pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
+        let fact_name = fact_name(pred);
+        let fact_name2 = fact_name.clone();
+
+        let field_types = pred.types
+            .iter()
+            .cloned()
+            .map(Ident::new)
+            .collect::<Vec<_>>();
+
+        let field_names = fields(pred);
+        let field_names2 = field_names.clone();
+
+        let arity = Lit::Int(pred.types.len() as u64, IntTy::Usize);
+        let arity2 = arity.clone();
+
+        let mut type_stores = Vec::new();
+        {
+            for (index, (type_, field_name)) in
+                pred.types.iter().zip(field_names.clone()).enumerate()
+            {
+                let store = typed::store(type_, quote! {self.#field_name});
+                let index_lit = Lit::Int(index as u64, IntTy::Usize);
+                type_stores.push(quote! {
+                    out[#index_lit] = #store;
+                });
+            }
+        }
+
+        let type_loads = pred.types
+            .iter()
+            .enumerate()
+            .map(|(idx, type_)| typed::load(type_, idx))
+            .collect::<Vec<_>>();
+
+        quote! {
+            pub struct #fact_name {
+                #(pub #field_names: #field_types),*
+            }
+            impl #fact_name2 {
+                fn from_tuple(db: &Database, tuple: &[usize]) -> Self {
+                    Self {
+                        #(#field_names2: #type_loads),*
+                    }
+                }
+                fn to_tuple(self, db: &mut Database) -> [usize; #arity] {
+                    let mut out = [0; #arity2];
+                    #(#type_stores)*
+                    out
                 }
             }
-            fn to_tuple(self, db: &mut Database) -> [usize; #arity] {
-                let mut out = [0; #arity2];
-                #(#type_stores)*
-                out
+        }
+    }
+
+    pub fn insert(pred: &ir::Predicate) -> quote::Tokens {
+        let insert_name = insert_name(pred);
+        let fact_name = fact_name(pred);
+        let tuple_name = tuple_name(pred);
+        quote! {
+            pub fn #insert_name(&mut self, fact: #fact_name) -> usize {
+                let tuple = fact.to_tuple(self);
+                self.#tuple_name.insert(&tuple).0
             }
         }
     }
 }
 
-fn predicate_insert(pred: &ir::Predicate) -> quote::Tokens {
-    let insert_name = Ident::new(format!("insert_{}", pred.name.to_lowercase()));
-    let fact_name = Ident::new(pred.name.clone());
-    let pred_name = Ident::new(format!("pred_{}", pred.name.to_lowercase()));
-    quote! {
-        pub fn #insert_name(&mut self, fact: #fact_name) -> usize {
-            let tuple = fact.to_tuple(self);
-            self.#pred_name.insert(&tuple).0
-        }
+mod query {
+    use ir;
+    use syn::{Ident, Lit, IntTy};
+    use quote;
+    use super::{typed, predicate};
+    use std::collections::HashMap;
+
+    pub struct QueryOut {
+        pub init: quote::Tokens,
+        pub impls: quote::Tokens,
+        pub decls: quote::Tokens,
     }
-}
 
-struct QueryOut {
-    init: quote::Tokens,
-    impls: quote::Tokens,
-    decls: quote::Tokens,
-}
+    pub fn store_name(query: &ir::Query) -> Ident {
+        Ident::new(format!("query_storage_{}", query.name.to_lowercase()))
+    }
 
-fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> QueryOut {
-    let query_name = Ident::new(format!("query_{}", query.name.to_lowercase()));
-    let query_incr = Ident::new(format!("query_incr_{}", query.name.to_lowercase()));
-    let query_result = Ident::new(format!("{}Result", query.name));
-    let query_result2 = query_result.clone();
-    let query_result3 = query_result.clone();
-    let query_result4 = query_result.clone();
-    let query_result5 = query_result.clone();
-    let query_result6 = query_result.clone();
+    fn func_name(query: &ir::Query) -> Ident {
+        Ident::new(format!("query_{}", query.name.to_lowercase()))
+    }
 
-    let query_vars = query
-        .vars
-        .iter()
-        .map(|var| Ident::new(var.clone()))
-        .collect::<Vec<_>>();
-    let query_vars2 = query_vars.clone();
-    let local_types = query
-        .vars
-        .iter()
-        .map(|var| query.types[var].clone())
-        .collect::<Vec<_>>();
-    let query_types = local_types
-        .iter()
-        .map(|ty| Ident::new(ty.clone()))
-        .collect::<Vec<_>>();
-    let mut proj_preds = Vec::new();
-    let mut proj_nums = Vec::new();
-    let build_indices = query
-        .gao
-        .iter()
-        .enumerate()
-        .map(|(pred_id, sub)| {
-            let raw_nums = sub.iter()
-                .map(|n| Lit::Int(*n as u64, IntTy::Usize))
-                .collect::<Vec<_>>();
-            let nums = quote! { &[#(#raw_nums),*] };
-            proj_nums.push(nums.clone());
-            let pred_name =
-                Ident::new(format!("pred_{}", query.predicates[pred_id].to_lowercase()));
-            proj_preds.push(pred_name.clone());
-            let proj_i = Ident::new(format!("proj_{}", pred_id));
-            let proj_i_2 = proj_i.clone();
-            let iter_i = Ident::new(format!("iter_{}", pred_id));
-            quote! {
-            let #proj_i = self.#pred_name.projection(#nums);
-            let mut #iter_i = #proj_i_2.skip_iter();
-        }
-        })
-        .collect::<Vec<_>>();
-    let proj_preds2 = proj_preds.clone();
-    let proj_nums2 = proj_nums.clone();
-    let push_indices = {
-        let iter_is = query
+    fn incr_func_name(query: &ir::Query) -> Ident {
+        Ident::new(format!("query_incr_{}", query.name.to_lowercase()))
+    }
+
+    fn result_name(query: &ir::Query) -> Ident {
+        Ident::new(format!("{}Result", query.name))
+    }
+
+    fn tuple_names(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Vec<Ident> {
+        query
+            .predicates
+            .iter()
+            .map(|pred_name| predicate::tuple_name(&preds[pred_name]))
+            .collect()
+    }
+
+    fn proj_name(id: usize) -> Ident {
+        Ident::new(format!("proj_{}", id))
+    }
+
+    fn idx_name(id: usize) -> Ident {
+        Ident::new(format!("iter_{}", id))
+    }
+
+    fn subjoin_mailbox_name(id: usize) -> Ident {
+        Ident::new(format!("subjoin_mailbox_{}", id))
+    }
+
+    fn subjoin_proj_name(id: usize) -> Ident {
+        Ident::new(format!("subjoin_proj_{}", id))
+    }
+
+    fn subjoin_name(id: usize) -> Ident {
+        Ident::new(format!("subjoin_{}", id))
+    }
+
+    fn subjoin_indices_name(id: usize) -> Ident {
+        Ident::new(format!("subjoin_indices_{}", id))
+    }
+
+    fn subjoin_idx_name(id: usize, sub: usize) -> Ident {
+        Ident::new(format!("subjoin_idx_{}_{}", id, sub))
+    }
+
+    fn build_projs(
+        query: &ir::Query,
+        preds: &HashMap<String, ir::Predicate>,
+    ) -> (quote::Tokens, Vec<quote::Tokens>) {
+        let mut proj_nums = Vec::new();
+        let build_projs = query
             .gao
             .iter()
             .enumerate()
-            .map(|(pred_id, _)| Ident::new(format!("iter_{}", pred_id)))
+            .map(|(pred_id, sub)| {
+                let raw_nums = sub.iter()
+                    .map(|n| Lit::Int(*n as u64, IntTy::Usize))
+                    .collect::<Vec<_>>();
+                let nums = quote! { &[#(#raw_nums),*] };
+                proj_nums.push(nums.clone());
+                let pred_name = predicate::tuple_name(&preds[&query.predicates[pred_id]]);
+                let proj_i = proj_name(pred_id);
+                quote! {
+                    let #proj_i = self.#pred_name.projection(#nums);
+                }
+            })
+            .collect::<Vec<_>>();
+        (
+            quote! {
+                #(#build_projs;)*
+            },
+            proj_nums,
+        )
+    }
+
+    fn build_idxs(query: &ir::Query) -> quote::Tokens {
+        let build_idxs = query
+            .gao
+            .iter()
+            .enumerate()
+            .map(|(pred_id, _)| {
+                let proj_i = proj_name(pred_id);
+                let iter_i = idx_name(pred_id);
+                quote! {
+                    let mut #iter_i = #proj_i.skip_iter();
+                }
+            })
             .collect::<Vec<_>>();
         quote! {
-            #(indices.push(&mut #iter_is);)*
+            #(#build_idxs;)*
         }
-    };
-    let restricts = {
+    }
+
+    fn restricts(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> quote::Tokens {
         let mut fields = Vec::new();
         let mut restricts = Vec::new();
         for (qf, v) in query.unify.iter() {
@@ -230,163 +301,234 @@ fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Query
                 restricts
             }
         }
-    };
-    let type_loads = local_types
-        .iter()
-        .enumerate()
-        .map(|(idx, type_)| typed::load(type_, idx))
-        .collect::<Vec<_>>();
-    let query_store_base = Ident::new(format!("query_storage_{}", query.name.to_lowercase()));
-    let query_store_base2 = query_store_base.clone();
-    let query_store = proj_preds
-        .iter()
-        .map(|_| query_store_base.clone())
-        .collect::<Vec<_>>();
-    let mut subjoin_names = Vec::new();
-    let build_all_subjoins = {
-        // TODO: add reordering to subjoins so that they each use their own restrict and put their
-        // mailbox as the first index to the joiner
-        let mut build_subjoins = Vec::new();
-        let mut build_subproj = Vec::new();
-        // TODO dedup this against build_indices
-        let build_all_projs = {
-            let all_projs = query
-                .gao
-                .iter()
-                .enumerate()
-                .map(|(pred_id, sub)| {
-                    let raw_nums = sub.iter()
-                        .map(|n| Lit::Int(*n as u64, IntTy::Usize))
-                        .collect::<Vec<_>>();
-                    let nums = quote! { &[#(#raw_nums),*] };
-                    proj_nums.push(nums.clone());
-                    let pred_name =
-                        Ident::new(format!("pred_{}", query.predicates[pred_id].to_lowercase()));
-                    proj_preds.push(pred_name.clone());
-                    let proj_i = Ident::new(format!("proj_{}", pred_id));
-                    quote! {
-                        let #proj_i = self.#pred_name.projection(#nums);
+
+    }
+
+    fn decls(query: &ir::Query) -> quote::Tokens {
+        let result = result_name(query);
+        let result2 = result.clone();
+
+        let mut vars = Vec::new();
+        let mut types = Vec::new();
+        let mut loads = Vec::new();
+        for (idx, var) in query.vars.iter().enumerate() {
+            vars.push(Ident::new(var.clone()));
+            let type_ = &query.types[var];
+            types.push(Ident::new(type_.clone()));
+            loads.push(typed::load(type_, idx));
+        }
+        let vars2 = vars.clone();
+        quote! {
+            pub struct #result {
+                #(#vars: #types),*
+            }
+            impl #result2 {
+                fn from_tuple(db: &Database, tuple: Vec<usize>) -> Self {
+                    Self {
+                        #(#vars2: #loads),*
                     }
-                })
-                .collect::<Vec<_>>();
+                }
+            }
+        }
+    }
+
+    fn gen_push_indices(query: &ir::Query) -> quote::Tokens {
+        let iter_is = query
+            .gao
+            .iter()
+            .enumerate()
+            .map(|(pred_id, _)| idx_name(pred_id))
+            .collect::<Vec<_>>();
+        quote! {
+            #(indices.push(&mut #iter_is);)*
+        }
+    }
+
+    fn gen_query(
+        query: &ir::Query,
+        preds: &HashMap<String, ir::Predicate>,
+    ) -> (quote::Tokens, quote::Tokens) {
+        let result = result_name(query);
+        let result2 = result.clone();
+
+        let (build_projs, proj_nums) = build_projs(query, preds);
+        let build_idxs = build_idxs(query);
+        let push_indices = gen_push_indices(query);
+        let query_func = func_name(query);
+        let query_store = store_name(query);
+        let query_store2 = query_store.clone();
+        let tuples = tuple_names(query, preds);
+        let restricts = restricts(query, preds);
+        (
             quote! {
-                #(#all_projs)*
+            pub fn #query_func(&self) -> Vec<#result> {
+                #build_projs
+                #build_idxs
+                let mut indices: Vec<&mut SkipIterator> = Vec::new();
+                #push_indices
+                Join::new(indices, &self.#query_store.restricts)
+                    .map(|tup| #result2::from_tuple(self, tup)).collect()
             }
-        };
-        for idx in 0..build_indices.len() {
-            let subjoin_indices_name = Ident::new(format!("subjoin_indices_{}", idx));
-            let subjoin_indices_name2 = subjoin_indices_name.clone();
-            let subjoin_proj_name = Ident::new(format!("subjoin_proj_{}", idx));
-            let subjoin_proj_name2 = subjoin_proj_name.clone();
-            let subjoin_idx_name = Ident::new(format!("subjoin_idx_{}", idx));
-            let subjoin_name = Ident::new(format!("subjoin_{}", idx));
-            let mut build_subjoin_idxs = Vec::new();
-            {
-                for sub in 0..build_indices.len() {
-                    if idx == sub {
-                        continue;
-                    }
-                    let subjoin_idx_name = Ident::new(format!("subjoin_idx_{}_{}", idx, sub));
-                    let proj = Ident::new(format!("proj_{}", sub));
-                    build_subjoin_idxs.push(quote! {
-                        let mut #subjoin_idx_name = #proj.skip_iter();
-                    });
+        },
+            quote! {
+                #(db.#tuples.register_projection(#proj_nums);)*
+                db.#query_store2.restricts = #restricts;
+            },
+        )
+    }
+
+    fn gen_push_incr_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
+        let mut push_idxs = Vec::new();
+        {
+            for sub in 0..query.predicates.len() {
+                let subjoin_indices = subjoin_indices_name(pred_id);
+                if pred_id == sub {
+                    let subjoin_mailbox = subjoin_mailbox_name(pred_id);
+                    push_idxs.push(quote! {
+                        #subjoin_indices.push(&mut #subjoin_mailbox);
+                    })
+                } else {
+                    let subjoin_idx_name = subjoin_idx_name(pred_id, sub);
+                    push_idxs.push(quote! {
+                        #subjoin_indices.push(&mut #subjoin_idx_name);
+                    })
                 }
             }
-            let mut push_idxs = Vec::new();
-            {
-                for sub in 0..build_indices.len() {
-                    let subjoin_indices_name0 = subjoin_indices_name.clone();
-                    if idx == sub {
-                        let subjoin_idx_name0 = subjoin_idx_name.clone();
-                        push_idxs.push(quote! {
-                            #subjoin_indices_name0.push(&mut #subjoin_idx_name0);
-                        })
-                    } else {
-                        let subjoin_idx_name = Ident::new(format!("subjoin_idx_{}_{}", idx, sub));
-                        push_idxs.push(quote! {
-                            #subjoin_indices_name0.push(&mut #subjoin_idx_name);
-                        })
-                    }
-                }
+        }
+        quote! {
+            #(#push_idxs)*
+        }
+    }
+
+    fn gen_subjoin_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
+        let mut build_subjoin_idxs = Vec::new();
+        for sub in 0..query.predicates.len() {
+            if pred_id == sub {
+                continue;
             }
-            let query_store_base_0 = query_store_base.clone();
-            let query_store_base_01 = query_store_base.clone();
-            let pred_name = Ident::new(format!("pred_{}", query.predicates[idx].to_lowercase()));
-            subjoin_names.push(subjoin_name.clone());
-            let idx = Lit::Int(idx as u64, IntTy::Usize);
-            build_subproj.push(quote! {
-                let #subjoin_proj_name =
-                    self.#pred_name.mailbox(self.#query_store_base_0.mailboxes[#idx]);
-            });
-            build_subjoins.push(quote! {
-                let mut #subjoin_idx_name = #subjoin_proj_name2.skip_iter();
-                #(#build_subjoin_idxs;)*
-                let mut #subjoin_indices_name: Vec<&mut SkipIterator> = Vec::new();
-                #(#push_idxs;)*
-                let #subjoin_name =
-                    Join::new(#subjoin_indices_name2, &self.#query_store_base_01.restricts);
+            let subjoin_idx = subjoin_idx_name(pred_id, sub);
+            let proj = proj_name(sub);
+            build_subjoin_idxs.push(quote! {
+                let mut #subjoin_idx = #proj.skip_iter();
             });
         }
         quote! {
-            #(#build_subproj)*
-            #build_all_projs
-            #(#build_subjoins;)*
+            #(#build_subjoin_idxs;)*
         }
-    };
-    let first_subjoin = subjoin_names[0].clone();
-    let rest_subjoin = subjoin_names.into_iter().skip(1).collect::<Vec<_>>();
-    QueryOut {
-        decls: quote! {
-        pub struct #query_result {
-            #(#query_vars: #query_types),*
-        }
-        impl #query_result2 {
-            fn from_tuple(db: &Database, tuple: Vec<usize>) -> Self {
-                Self {
-                    #(#query_vars2: #type_loads),*
-                }
+    }
+
+    fn gen_incr(
+        query: &ir::Query,
+        preds: &HashMap<String, ir::Predicate>,
+    ) -> (quote::Tokens, quote::Tokens) {
+        // TODO: add reordering to subjoins so that they each use their own restrict and put their
+        // mailbox as the first index to the joiner. This will likely involve work in the IR as
+        // well to generate additional permutation/restriction combos - that logic doesn't belong
+        // in the code generator.
+
+        let query_result = result_name(query);
+        let query_result2 = query_result.clone();
+
+        let query_incr_func = incr_func_name(query);
+
+        let mut subjoin_names = Vec::new();
+
+        let query_store = query
+            .predicates
+            .iter()
+            .map(|_| store_name(query))
+            .collect::<Vec<_>>();
+
+        let tuples = tuple_names(query, preds);
+
+        let (build_base_projs, perms) = build_projs(query, preds);
+
+        let build_all_subjoins = {
+            let mut build_subjoins = Vec::new();
+            let mut build_subproj = Vec::new();
+            for idx in 0..query.predicates.len() {
+                let subjoin_proj_name = subjoin_proj_name(idx);
+                let subjoin_proj_name2 = subjoin_proj_name.clone();
+                let subjoin_mailbox = subjoin_mailbox_name(idx);
+                let subjoin_name = subjoin_name(idx);
+                let build_subjoin_idxs = gen_subjoin_indices(query, idx);
+                let push_idxs = gen_push_incr_indices(query, idx);
+                let query_store = store_name(query);
+                let query_store2 = query_store.clone();
+                let tuple = tuples[idx].clone();
+                subjoin_names.push(subjoin_name.clone());
+                let subjoin_indices = subjoin_indices_name(idx);
+                let subjoin_indices2 = subjoin_indices.clone();
+                let idx = Lit::Int(idx as u64, IntTy::Usize);
+                build_subproj.push(quote! {
+                let #subjoin_proj_name =
+                    self.#tuple.mailbox(self.#query_store.mailboxes[#idx]);
+            });
+                build_subjoins.push(quote! {
+                    let mut #subjoin_mailbox = #subjoin_proj_name2.skip_iter();
+                    #build_subjoin_idxs
+                    let mut #subjoin_indices: Vec<&mut SkipIterator> = Vec::new();
+                    #push_idxs
+                    let #subjoin_name =
+                        Join::new(#subjoin_indices2, &self.#query_store2.restricts);
+                });
             }
+            quote! {
+            #(#build_subproj)*
+            #build_base_projs
+            #(#build_subjoins)*
         }
-    },
-        impls: quote! {
-        pub fn #query_name(&self) -> Vec<#query_result3> {
-            #(#build_indices;)*
-            let mut indices: Vec<&mut SkipIterator> = Vec::new();
-            #push_indices
-            Join::new(indices, &self.#query_store_base.restricts)
-                .map(|tup| #query_result4::from_tuple(self, tup)).collect()
+        };
+
+        let first_subjoin = subjoin_names[0].clone();
+        let rest_subjoin = subjoin_names.into_iter().skip(1).collect::<Vec<_>>();
+
+        (
+            quote!{
+                pub fn #query_incr_func(&mut self) -> Vec<#query_result> {
+                    #build_all_subjoins
+                    #first_subjoin#(.chain(#rest_subjoin))*
+                        .map(|tup| #query_result2::from_tuple(self, tup)).collect()
+                } 
+            },
+            quote! {
+             #(db.#query_store.mailboxes.push(db.#tuples.register_mailbox(#perms));)*
+         },
+        )
+    }
+
+    pub fn gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> QueryOut {
+        let (query_func, query_init) = gen_query(query, preds);
+        let (incr_func, incr_init) = gen_incr(query, preds);
+        QueryOut {
+            decls: decls(query),
+            impls: quote! {
+                #query_func
+                #incr_func
+           },
+            init: quote! {
+                #query_init
+                #incr_init
+            },
         }
-        pub fn #query_incr(&mut self) -> Vec<#query_result5> {
-            #build_all_subjoins
-            #first_subjoin#(.chain(#rest_subjoin))*
-                .map(|tup| #query_result6::from_tuple(self, tup)).collect()
-        }
-    },
-        init: quote! {
-        #(db.#proj_preds.register_projection(#proj_nums);)*
-        #(db.#query_store.mailboxes.push(db.#proj_preds2.register_mailbox(#proj_nums2));)*
-        db.#query_store_base2.restricts = #restricts;
-    },
     }
 }
-
 /// Transforms a complete Mycroft program in IR form into code to include in a user program
 pub fn program(prog: &ir::Program) -> quote::Tokens {
     use std::collections::HashSet;
     let pred_fact_decls = prog.predicates
         .values()
-        .map(predicate_fact)
+        .map(predicate::fact)
         .collect::<Vec<_>>();
     let pred_inserts = prog.predicates
         .values()
-        .map(predicate_insert)
+        .map(predicate::insert)
         .collect::<Vec<_>>();
     let mut query_structs = Vec::new();
     let mut query_funcs = Vec::new();
     let mut query_registrations = Vec::new();
     for gen in prog.queries.values().map(|query| {
-        query_gen(query, &prog.predicates)
+        query::gen(query, &prog.predicates)
     })
     {
         query_structs.push(gen.decls);
@@ -394,8 +536,8 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         query_registrations.push(gen.init)
     }
     let pred_names = prog.predicates
-        .keys()
-        .map(|name| Ident::new(format!("pred_{}", name.to_lowercase())))
+        .values()
+        .map(predicate::tuple_name)
         .collect::<Vec<_>>();
     let pred_names2 = pred_names.clone();
 
@@ -419,9 +561,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     let query_storage_names = prog.queries
         .values()
-        .map(|query| {
-            Ident::new(format!("query_storage_{}", query.name.to_lowercase()))
-        })
+        .map(query::store_name)
         .collect::<Vec<_>>();
     let query_storage_names2 = query_storage_names.clone();
 

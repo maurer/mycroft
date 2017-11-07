@@ -9,6 +9,8 @@ use super::typed;
 pub mod names {
     use ir;
     use syn::Ident;
+
+    // Fields of a predicate, using native names if present, or arg0-argN if not
     pub fn fields(pred: &ir::Predicate) -> Vec<Ident> {
         match pred.names {
             Some(ref names) => names.iter().cloned().map(Ident::new).collect(),
@@ -22,19 +24,23 @@ pub mod names {
         }
     }
 
+    // Name of a predicate's fact type
     pub fn fact(pred: &ir::Predicate) -> Ident {
         Ident::new(pred.name.clone())
     }
 
+    // Name of a predicate's insertion function
     pub fn insert(pred: &ir::Predicate) -> Ident {
         Ident::new(format!("insert_{}", pred.name.to_lowercase()))
     }
 
+    // Name of the field where the predicate's tuples are stored
     pub fn tuple(pred: &ir::Predicate) -> Ident {
         Ident::new(format!("pred_{}", pred.name.to_lowercase()))
     }
 }
 
+// Generates a fact type and tuple conversion between it
 pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
     let fact_name = names::fact(pred);
     let fact_name2 = fact_name.clone();
@@ -87,6 +93,7 @@ pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
     }
 }
 
+// Generates an insertion function by using the tuple converter
 pub fn insert(pred: &ir::Predicate) -> quote::Tokens {
     let insert_name = names::insert(pred);
     let fact_name = names::fact(pred);

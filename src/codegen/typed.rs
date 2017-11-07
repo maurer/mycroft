@@ -1,5 +1,6 @@
 use syn::{Ident, Lit, IntTy};
 use quote;
+// Whether the type can be cast into a usize rather than using typed storage
 pub fn is_small(type_: &str) -> bool {
     match type_ {
         //TODO remove u64 from this list on 32-bit systems
@@ -9,6 +10,8 @@ pub fn is_small(type_: &str) -> bool {
     }
 }
 
+// Generates an expression to get the typed value from an indexed tuple, assuming the tuple is in
+// the variable 'tuple', and the database in the variable 'db'
 pub fn load(type_: &str, index: usize) -> quote::Tokens {
     let index_lit = Lit::Int(index as u64, IntTy::Usize);
     if is_small(type_) {
@@ -25,6 +28,8 @@ pub fn load(type_: &str, index: usize) -> quote::Tokens {
     }
 }
 
+// Generates an expression to turn a typed value into a key to construct a tuple with, assuming the
+// database is in the variable 'db'
 pub fn store(type_: &str, expr: &quote::Tokens) -> quote::Tokens {
     if is_small(type_) {
         quote! {
@@ -38,6 +43,7 @@ pub fn store(type_: &str, expr: &quote::Tokens) -> quote::Tokens {
     }
 }
 
+// Provides the name of typed storage for a given type
 pub fn name(type_: &str) -> Ident {
     Ident::new(format!("data_{}", type_.to_lowercase()))
 }

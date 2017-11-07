@@ -98,13 +98,11 @@ fn predicate_fact(pred: &ir::Predicate) -> quote::Tokens {
             #(pub #names: #types),*
         }
         impl #name2 {
-            #[allow(dead_code)]
             fn from_tuple(_db: &Database, tuple: &[usize]) -> Self {
                 Self {
                     #(#names2: #type_loads),*
                 }
             }
-            #[allow(dead_code)]
             fn to_tuple(self, _db: &mut Database) -> [usize; #arity] {
                 let mut out = [0; #arity2];
                 #(#type_stores)*
@@ -221,7 +219,7 @@ fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Query
                 }
             });
             let type_ = &preds[&query.predicates[qf.pred_id]].types[qf.field_id];
-            let k = type_store(type_, k.clone(), "db");
+            let k = type_store(type_, k.clone(), "_db");
             restricts.push(quote! {
                 Restrict::Const(#k)
             });
@@ -234,7 +232,7 @@ fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Query
             }
         }
     };
-    let type_loads = typed_loads(&local_types, "db");
+    let type_loads = typed_loads(&local_types, "_db");
     let query_store_base = Ident::new(format!("query_storage_{}", query.name.to_lowercase()));
     let query_store_base2 = query_store_base.clone();
     let query_store = proj_preds
@@ -341,7 +339,7 @@ fn query_gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Query
             #(#query_vars: #query_types),*
         }
         impl #query_result2 {
-            fn from_tuple(db: &Database, tuple: Vec<usize>) -> Self {
+            fn from_tuple(_db: &Database, tuple: Vec<usize>) -> Self {
                 Self {
                     #(#query_vars2: #type_loads),*
                 }
@@ -434,7 +432,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     // in the same module.
     quote! {
        mod mycroft_program {
-            #![allow(unused_imports)]
+            #![allow(unused_imports,dead_code,unused_variables,unused_mut)]
             use mycroft_support::storage::{Tuples, Data};
             use mycroft_support::join::{TrivialIterator, Join, SkipIterator, Field, Restrict};
             use std::collections::HashMap;

@@ -19,8 +19,8 @@ fn insert_n(n: usize, b: &mut Bencher) {
     }
     b.iter(|| {
         let mut p = Database::new();
-        for i in 0..n {
-            p.insert_p(P { arg0: rng[i] });
+        for n in &rng {
+            p.insert_p(P { arg0: *n });
         }
         test::black_box(p)
     })

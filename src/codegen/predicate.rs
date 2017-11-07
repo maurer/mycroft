@@ -49,7 +49,7 @@ pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
     let mut type_stores = Vec::new();
     {
         for (index, (type_, field_name)) in pred.types.iter().zip(field_names.clone()).enumerate() {
-            let store = typed::store(type_, quote! {self.#field_name});
+            let store = typed::store(type_, &quote! {self.#field_name});
             let index_lit = Lit::Int(index as u64, IntTy::Usize);
             type_stores.push(quote! {
                 out[#index_lit] = #store;

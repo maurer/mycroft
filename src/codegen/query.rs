@@ -113,7 +113,7 @@ fn build_idxs(query: &ir::Query) -> quote::Tokens {
 fn restricts(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> quote::Tokens {
     let mut fields = Vec::new();
     let mut restricts = Vec::new();
-    for (qf, v) in query.unify.iter() {
+    for (qf, v) in &query.unify {
         let clause = Lit::Int(qf.pred_id as u64, IntTy::Usize);
         let field = Lit::Int(qf.field_id as u64, IntTy::Usize);
         let var = Lit::Int(*v as u64, IntTy::Usize);
@@ -127,7 +127,7 @@ fn restricts(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> quote
                 Restrict::Unify(#var)
             });
     }
-    for (qf, k) in query.eq.iter() {
+    for (qf, k) in &query.eq {
         let clause = Lit::Int(qf.pred_id as u64, IntTy::Usize);
         let field = Lit::Int(qf.field_id as u64, IntTy::Usize);
         fields.push(quote! {
@@ -138,7 +138,7 @@ fn restricts(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> quote
         });
         let type_ = &preds[&query.predicates[qf.pred_id]].types[qf.field_id];
         let id_k = Ident::new(k.clone());
-        let k = typed::store(type_, quote! {#id_k});
+        let k = typed::store(type_, &quote! {#id_k});
         restricts.push(quote! {
             Restrict::Const(#k)
         });
@@ -295,7 +295,7 @@ fn gen_incr(
     let build_all_subjoins = {
         let mut build_subjoins = Vec::new();
         let mut build_subproj = Vec::new();
-        for idx in 0..query.predicates.len() {
+        for (idx, tuple) in tuples.iter().enumerate() {
             let subjoin_proj_name = subjoin_proj_name(idx);
             let subjoin_proj_name2 = subjoin_proj_name.clone();
             let subjoin_mailbox = subjoin_mailbox_name(idx);
@@ -304,7 +304,6 @@ fn gen_incr(
             let push_idxs = gen_push_incr_indices(query, idx);
             let query_store = store_name(query);
             let query_store2 = query_store.clone();
-            let tuple = tuples[idx].clone();
             subjoin_names.push(subjoin_name.clone());
             let subjoin_indices = subjoin_indices_name(idx);
             let subjoin_indices2 = subjoin_indices.clone();

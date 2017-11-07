@@ -85,7 +85,7 @@ impl Predicate {
                 let mut types = Vec::new();
                 let mut sorted_fields: Vec<_> = fields.clone();
                 sorted_fields.sort();
-                for field in sorted_fields.into_iter() {
+                for field in sorted_fields {
                     names.push(field.name);
                     types.push(field.val);
                 }
@@ -111,7 +111,7 @@ pub struct QueryField {
 }
 
 /// IR Query Representation
-/// All QueryField values are relative to the ordering given by the GAO
+/// All `QueryField` values are relative to the ordering given by the GAO
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
     /// Predicate name
@@ -143,7 +143,7 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
             if v.len() != pred.types.len() {
                 return Err(ErrorKind::ShortClause(pred.clone(), v.len()).into());
             }
-            Ok((v.iter().cloned().enumerate().collect()))
+            Ok(v.iter().cloned().enumerate().collect())
         }
         ast::Fields::Named(ref nm) => {
             if pred.names.is_none() {
@@ -167,7 +167,7 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
                     })
                     .next()
                     .unwrap();
-                if fields.len() == 0 {
+                if fields.is_empty() {
                     return Err(ErrorKind::UndefinedField(pred.clone(), name.clone()).into());
                 }
                 // This invariant should be handled in predicate construction, but it's cheap to
@@ -180,7 +180,7 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
     }
 }
 
-fn permute(gao: &Vec<Vec<usize>>, qf: &QueryField) -> QueryField {
+fn permute(gao: &[Vec<usize>], qf: &QueryField) -> QueryField {
     for (idx, field) in gao[qf.pred_id].iter().enumerate() {
         if qf.field_id == *field {
             return QueryField {
@@ -209,7 +209,7 @@ impl Query {
             }
             predicates.push(clause.pred_name.clone());
             let pred = &preds[&clause.pred_name];
-            for (var_idx, match_) in idx_form(&pred, &clause.matches)? {
+            for (var_idx, match_) in idx_form(pred, &clause.matches)? {
                 let qf = QueryField {
                     pred_id: idx,
                     field_id: var_idx,
@@ -221,7 +221,7 @@ impl Query {
                             var_map.insert(s.clone(), vars.len());
                             vars.push(s.clone());
                         }
-                        let var_type = types.entry(s.clone()).or_insert(qf_type.clone());
+                        let var_type = types.entry(s.clone()).or_insert_with(|| qf_type.clone());
                         if qf_type != var_type {
                             return Err(
                                 ErrorKind::QueryTypeMismatch(
@@ -232,7 +232,7 @@ impl Query {
                                 ).into(),
                             );
                         }
-                        pre_unify.entry(s.clone()).or_insert(vec![]).push(qf);
+                        pre_unify.entry(s.clone()).or_insert_with(Vec::new).push(qf);
                     }
                     ast::Match::Const(ref k) => {
                         pre_eq.push((qf, k.clone()));
@@ -245,11 +245,11 @@ impl Query {
         // Generate the GAO
         let mut pre_gao = Vec::new();
         // First, any constant terms
-        for &(ref qf, _) in pre_eq.iter() {
+        for &(ref qf, _) in &pre_eq {
             pre_gao.push(qf.clone());
         }
         // Then, add unifications, grouped
-        for var in vars.iter() {
+        for var in &vars {
             let qfs = &pre_unify[var];
             for qf in qfs.iter() {
                 pre_gao.push(qf.clone());
@@ -259,7 +259,7 @@ impl Query {
         let mut gao = Vec::new();
         for i in 0..predicates.len() {
             let mut entry = Vec::new();
-            for qf in pre_gao.iter() {
+            for qf in &pre_gao {
                 if qf.pred_id == i {
                     entry.push(qf.field_id);
                 }
@@ -269,14 +269,14 @@ impl Query {
 
         // Translate pre_unify and pre_eq via the gao
         let mut unify = HashMap::new();
-        for (var, qfs) in pre_unify.iter() {
+        for (var, qfs) in &pre_unify {
             let var_id = var_map[var];
             for qf in qfs {
                 unify.insert(permute(&gao, qf), var_id);
             }
         }
         let mut eq = HashMap::new();
-        for &(ref qf, ref k) in pre_eq.iter() {
+        for &(ref qf, ref k) in &pre_eq {
             eq.insert(permute(&gao, qf), k.clone());
         }
 

@@ -1,3 +1,5 @@
+// The parser! macro spews unbound matches, so disable the lint in this file
+#![cfg_attr(feature = "cargo-clippy", allow(unneeded_field_pattern))]
 //! Provides parsing functions for the Mycroft language.
 use ast::*;
 use combine::{Parser, many, between, sep_by1};
@@ -62,7 +64,7 @@ parser! {
         where [I: Stream<Item=char>,
                P: Parser<Input=I, Output=O>] {
         between(lex_char('('), lex_char(')'),
-                sep_by1(p, lex_char(','))).map(|x| Fields::Ordered(x))
+                sep_by1(p, lex_char(','))).map(Fields::Ordered)
     }
 }
 
@@ -76,7 +78,7 @@ parser! {
                 val: f.1
             }});
         between(lex_char('{'), lex_char('}'),
-                sep_by1(field, lex_char(','))).map(|x| Fields::Named(x))
+                sep_by1(field, lex_char(','))).map(Fields::Named)
     }
 }
 

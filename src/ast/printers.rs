@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter, Error};
 use ast::*;
 
-fn sep_by<T: Display>(sep: &str, mult: &Vec<T>, f: &mut Formatter) -> Result<(), Error> {
+fn sep_by<T: Display>(sep: &str, mult: &[T], f: &mut Formatter) -> Result<(), Error> {
     for (idx, v) in mult.iter().enumerate() {
         write!(f, "{}", v)?;
         if idx != mult.len() - 1 {

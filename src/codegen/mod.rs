@@ -39,7 +39,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     let mut type_set = HashSet::new();
     for pred in prog.predicates.values() {
-        for type_ in pred.types.iter() {
+        for type_ in &pred.types {
             type_set.insert(type_.clone());
         }
     }
@@ -52,7 +52,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     let type_names = type_set
         .into_iter()
         .filter(|type_| !typed::is_small(type_))
-        .map(|type_name| Ident::new(type_name))
+        .map(Ident::new)
         .collect::<Vec<_>>();
 
     let query_storage_names = prog.queries

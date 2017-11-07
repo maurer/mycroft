@@ -12,7 +12,7 @@ pub fn is_small(type_: &str) -> bool {
 pub fn load(type_: &str, index: usize) -> quote::Tokens {
     let index_lit = Lit::Int(index as u64, IntTy::Usize);
     if is_small(type_) {
-        let out_type = Ident::new(type_.clone());
+        let out_type = Ident::new(type_.to_string());
         quote! {
             tuple[#index_lit] as #out_type
         }
@@ -25,7 +25,7 @@ pub fn load(type_: &str, index: usize) -> quote::Tokens {
     }
 }
 
-pub fn store(type_: &str, expr: quote::Tokens) -> quote::Tokens {
+pub fn store(type_: &str, expr: &quote::Tokens) -> quote::Tokens {
     if is_small(type_) {
         quote! {
             #expr as usize

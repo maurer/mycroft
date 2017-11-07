@@ -71,7 +71,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
        mod mycroft_program {
             #![allow(unused_imports,dead_code,unused_variables,unused_mut)]
             use mycroft_support::storage::{Tuples, Data};
-            use mycroft_support::join::{TrivialIterator, Join, SkipIterator, Field, Restrict};
+            use mycroft_support::join::{Join, SkipIterator, Field, Restrict};
             use std::collections::HashMap;
             #[derive(Default)]
             struct QueryStorage {

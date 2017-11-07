@@ -20,7 +20,7 @@ pub fn load(type_: &str, index: usize) -> quote::Tokens {
         let data_name = name(type_);
         let index_lit = Lit::Int(index as u64, IntTy::Usize);
         quote! {
-            db.#data_name.get(tuple[#index_lit]).clone()
+            db.#data_name[tuple[#index_lit]].clone()
         }
     }
 }

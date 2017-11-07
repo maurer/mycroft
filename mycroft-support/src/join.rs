@@ -1,20 +1,41 @@
+//! `join` implements a simple indexed join with the assumption of a global attribute order. This
+//! is likely not the optimal join, but it will get us started.
 use std::collections::HashMap;
-type Tuple = Vec<usize>;
+/// Shorthand for a variable length tuple
+pub type Tuple = Vec<usize>;
+/// A `SkipIterator` is like a normal iterator, but:
+///
+/// * The arity of all returned `Tuple`s must be identical, and equal to the value returned by
+///   `arity()`
+/// * It can be moved to the first value above or equal to a tuple, meaning the iterator must be
+///   rewindable.
 pub trait SkipIterator {
+    /// Provides the next tuple in the iterator
     fn next(&mut self) -> Option<Tuple>;
+    /// Sets the iterator position to return the minimum value which is greater than or equal to
+    /// the provided min.
     fn skip(&mut self, min: Tuple);
+    /// Returns the arity of the tuples that will be returned by `next()`
     fn arity(&self) -> usize;
 }
 
+/// A field specifies a particular value in the join problem
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash)]
 pub struct Field {
+    /// `clause` refers to which iterator this value comes from, based on the order they were
+    /// provided to the `Join` constructor
     pub clause: usize,
+    /// `field` indicates offset into the tuple referred to
     pub field: usize,
 }
 
+/// A `Restrict` describes a way a particular `Field` can be limited in the join
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash)]
 pub enum Restrict {
+    /// The value at `Field` must equal the provided value
     Const(usize),
+    /// The value at `Field` must equal all other values which were restricted by being `Unify`'d
+    /// to the same provided key
     Unify(usize),
 }
 
@@ -48,7 +69,7 @@ impl Restrict {
     }
 }
 
-
+/// A join iterator, made of multiple `SkipIterators`, combined with the join condition.
 pub struct Join<'a> {
     indices: Vec<&'a mut SkipIterator>,
     restricts: &'a HashMap<Field, Restrict>,
@@ -75,8 +96,21 @@ fn min_possible(
     out
 }
 
-impl <'a> Join<'a> {
-    pub fn new(indices: Vec<&'a mut SkipIterator>, restricts: &'a HashMap<Field, Restrict>) -> Self {
+impl<'a> Join<'a> {
+    /// Creates a new join iterator:
+    ///
+    /// * `indices` will be walked in the order provided, so if you know you have a small one, try to
+    ///   put it first
+    /// * `restricts` must use a tight, ascending variable ordering, that is:
+    ///
+    ///   * If field0 < field1, and both map to `Unify(var0)` and `Unify(var1)` respectively, var0
+    ///     < var1
+    ///   * If `Unify(var)` is present in the map, and var0 < var, then `Unify(var0)` is present in
+    ///     the map
+    pub fn new(
+        indices: Vec<&'a mut SkipIterator>,
+        restricts: &'a HashMap<Field, Restrict>,
+    ) -> Self {
         let mut join = Join {
             indices: indices,
             restricts: restricts,
@@ -97,7 +131,7 @@ impl <'a> Join<'a> {
         self.indices[n].skip(min_possible(&self.candidate, &self.restricts, n, arity));
     }
 }
-impl <'a> Iterator for Join<'a> {
+impl<'a> Iterator for Join<'a> {
     type Item = Tuple;
     fn next(&mut self) -> Option<Self::Item> {
         // Join invariants:
@@ -119,7 +153,7 @@ impl <'a> Iterator for Join<'a> {
                                 if !r.check(&mut self.candidate, v) {
                                     if n == 0 {
                                         self.candidate.truncate(self.candidate_len.pop().unwrap());
-                                        return None
+                                        return None;
                                     }
                                     left_out = true;
                                 }
@@ -135,7 +169,7 @@ impl <'a> Iterator for Join<'a> {
                         // We have a complete candidate
                         let out = self.candidate.clone();
                         self.candidate.truncate(self.candidate_len.pop().unwrap());
-                        return Some(out)
+                        return Some(out);
                     }
                     // We're not done yet
                     self.right();
@@ -143,7 +177,7 @@ impl <'a> Iterator for Join<'a> {
                 None => {
                     if n == 0 {
                         self.candidate.truncate(self.candidate_len.pop().unwrap());
-                        return None
+                        return None;
                     }
                     self.left();
                 }
@@ -152,44 +186,49 @@ impl <'a> Iterator for Join<'a> {
     }
 }
 
-pub struct TrivialIterator {
-    payload: Vec<Vec<usize>>,
-    loc: usize,
-}
-
-impl TrivialIterator {
-    pub fn new(mut payload: Vec<Vec<usize>>) -> Self {
-        payload.sort();
-        payload.dedup();
-        TrivialIterator {
-            payload: payload,
-            loc: 0,
-        }
-    }
-}
-
-impl SkipIterator for TrivialIterator {
-    fn next(&mut self) -> Option<Tuple> {
-        if self.loc < self.payload.len() {
-            self.loc += 1;
-            Some(self.payload[self.loc - 1].clone())
-        } else {
-            None
-        }
-    }
-    fn skip(&mut self, min: Tuple) {
-        self.loc = 0;
-        while (self.payload.len() > self.loc) && (self.payload[self.loc] < min) {
-            self.loc = self.loc + 1;
-        }
-    }
-    fn arity(&self) -> usize {
-        self.payload[0].len()
-    }
-}
 
 #[cfg(test)]
 mod test {
+    /// `TrivialIterator` provides a sort+dedup implementation of a `SkipIterator`.
+    /// It will be slower than traditional indexes in essentailly all cases - it is _not_ the
+    /// equivalent of a full tablescan, that is just an iterator with .skip() no-opped.
+    /// It's provided to allow tests to separate from index implementation/initialization.
+    pub struct TrivialIterator {
+        payload: Vec<Vec<usize>>,
+        loc: usize,
+    }
+
+    impl TrivialIterator {
+        /// Consumes a list of tuples and produces a `SkipIterator` for them
+        pub fn new(mut payload: Vec<Vec<usize>>) -> Self {
+            payload.sort();
+            payload.dedup();
+            TrivialIterator {
+                payload: payload,
+                loc: 0,
+            }
+        }
+    }
+
+    impl SkipIterator for TrivialIterator {
+        fn next(&mut self) -> Option<Tuple> {
+            if self.loc < self.payload.len() {
+                self.loc += 1;
+                Some(self.payload[self.loc - 1].clone())
+            } else {
+                None
+            }
+        }
+        fn skip(&mut self, min: Tuple) {
+            self.loc = 0;
+            while (self.payload.len() > self.loc) && (self.payload[self.loc] < min) {
+                self.loc = self.loc + 1;
+            }
+        }
+        fn arity(&self) -> usize {
+            self.payload[0].len()
+        }
+    }
     use super::*;
     use std::collections::HashMap;
 

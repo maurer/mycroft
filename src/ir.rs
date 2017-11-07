@@ -156,6 +156,9 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
                     return Err(ErrorKind::DoubleBind(pred.clone(), name.clone()).into());
                 }
                 seen_fields.insert(name.clone());
+                // This ugly bit of code just finds the index of the name present in the named
+                // field in the predicate. It's encoded as a 1 or 0 element vector based on whether
+                // it was found.
                 let fields: Vec<_> = pred.names
                     .iter()
                     .map(|ns| {
@@ -180,6 +183,8 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
     }
 }
 
+// Moves a QueryField in base form to one after GAO permutation to allow it to be used to generate
+// a Restrict
 fn permute(gao: &[Vec<usize>], qf: &QueryField) -> QueryField {
     for (idx, field) in gao[qf.pred_id].iter().enumerate() {
         if qf.field_id == *field {

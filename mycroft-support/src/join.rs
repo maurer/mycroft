@@ -40,6 +40,8 @@ pub enum Restrict {
 }
 
 impl Restrict {
+    // Checks whether a restriction is met, updating the candidate if it has a new variable
+    // definition
     fn check(&self, candidate: &mut Vec<usize>, val: usize) -> bool {
         match *self {
             Restrict::Const(v) => v == val,
@@ -55,6 +57,8 @@ impl Restrict {
             }
         }
     }
+    // Provides the minimum legal value for the field, assuming the candidate we have partially
+    // locked in.
     fn min(&self, candidate: &Vec<usize>) -> usize {
         match *self {
             Restrict::Const(v) => v,
@@ -73,7 +77,9 @@ impl Restrict {
 pub struct Join<'a> {
     indices: Vec<&'a mut SkipIterator>,
     restricts: &'a HashMap<Field, Restrict>,
+    // Currently selected variable assignment
     candidate: Vec<usize>,
+    // Stack of previous variable assignment lengths so we can rewind choices
     candidate_len: Vec<usize>,
 }
 
@@ -117,14 +123,19 @@ impl<'a> Join<'a> {
             candidate: Vec::new(),
             candidate_len: Vec::new(),
         };
+        // We need to .right() once before starting to initialize the leftmost iterator properly
         join.right();
         join
     }
+
+    // Moves one iterator left, e.g. because we have no more possibilities on this one
     fn left(&mut self) {
         self.candidate.truncate(self.candidate_len.pop().unwrap());
         self.candidate.truncate(self.candidate_len.pop().unwrap());
     }
 
+    // Moves one iterator right, e.g. this one matched, and we need to finish filling the candidate
+    // and checking restrictions
     fn right(&mut self) {
         let n = self.candidate_len.len();
         let arity = self.indices[n].arity();

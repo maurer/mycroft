@@ -11,6 +11,8 @@ pub struct Program {
     /// The list of available queries: questions that the database will be able to answer
     /// efficiently.
     pub queries: Vec<Query>,
+    /// The list of rules to be active on the database when running
+    pub rules: Vec<Rule>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -74,4 +76,17 @@ pub enum Match {
     Const(String),
     /// No restriction
     Unbound,
+}
+
+/// A `Rule` is a triggered transition that will instantiate the head and insert it when the body
+/// is matched.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Rule {
+    /// Rule name, to be used in debugging and provenance
+    pub name: String,
+    /// Clause which must contain as its matches only variables appearing in the body and constants
+    /// On successful match of the body, the results will be substituted into the head and realized.
+    pub head: Clause,
+    /// Set of clauses which must unify to provide input to the head
+    pub body: Vec<Clause>,
 }

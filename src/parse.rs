@@ -2,8 +2,8 @@
 #![cfg_attr(feature = "cargo-clippy", allow(unneeded_field_pattern))]
 //! Provides parsing functions for the Mycroft language.
 use ast::*;
-use combine::{Parser, many, between, sep_by1};
-use combine::char::{letter, spaces, char, digit};
+use combine::{Parser, many, between, sep_by1, try};
+use combine::char::{letter, spaces, char, digit, string};
 use combine::primitives::Stream;
 
 parser! {
@@ -25,6 +25,13 @@ parser! {
     fn lex_char[I](c: char)(I) -> char
         where [I: Stream<Item=char>] {
         char(*c).skip(spaces())
+    }
+}
+
+parser! {
+    fn lex_str[I](s: &'static str)(I) -> &'static str
+        where [I: Stream<Item=char>] {
+        string(s).skip(spaces())
     }
 }
 
@@ -119,6 +126,20 @@ parser! {
 }
 
 parser! {
+    fn rule[I]()(I) -> Rule
+        where [I: Stream<Item=char>] {
+        let rule_name = ident();
+        let rule_head = clause();
+        let rule_body = sep_by1(clause(), lex_char('&'));
+        (rule_name, lex_char(':'), rule_head, lex_str("<-"), rule_body).map(|r| Rule {
+            name: r.0,
+            head: r.2,
+            body: r.4
+        })
+    }
+}
+
+parser! {
 /// `program` will return a combine parser constructor that will parse legal Mycroft programs.
 /// To parse with it:
 /// ```
@@ -134,12 +155,13 @@ parser! {
 /// combine error if not. Errors may be poor quality until 1.0.
     pub fn program[I]()(I) -> Program
         where [I: Stream<Item=char>] {
-            (spaces(),
-             many(predicate()), many(query())).map(|ps| Program {
-                predicates: ps.1,
-                queries: ps.2,
-            })
-        }
+        (spaces(),
+        many(try(predicate())), many(try(query())), many(try(rule()))).map(|ps| Program {
+            predicates: ps.1,
+            queries: ps.2,
+            rules: ps.3,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -155,6 +177,7 @@ mod test {
         let trivial_prog = Program {
             predicates: vec![],
             queries: vec![],
+            rules: vec![],
         };
         assert_eq!(Ok((trivial_prog, "")), program().parse(trivial_prog_code));
     }
@@ -187,6 +210,7 @@ mod test {
                 },
             ],
             queries: vec![],
+            rules: vec![],
         };
         assert_eq!(Ok((pred_prog, "")), program().parse(pred_prog_code));
     }
@@ -215,7 +239,56 @@ mod test {
                     ],
                 },
             ],
+            rules: vec![],
         };
         assert_eq!(Ok((query_prog, "")), program().parse(query_prog_code));
+    }
+
+    // No defined queries, defined rule
+    #[test]
+    fn no_q_yes_r() {
+        let code = r#"
+            bar(bang)
+            baz(bang)
+            out(usize)
+            eq_sig: out(~THREE) <- bar(x) & baz(x)
+        "#;
+        let prog = Program {
+            predicates: vec![
+                Predicate {
+                    name: "bar".to_string(),
+                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                },
+                Predicate {
+                    name: "baz".to_string(),
+                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                },
+                Predicate {
+                    name: "out".to_string(),
+                    fields: Fields::Ordered(vec!["usize".to_string()]),
+                },
+            ],
+            queries: vec![],
+            rules: vec![
+                Rule {
+                    name: "eq_sig".to_string(),
+                    head: Clause {
+                        pred_name: "out".to_string(),
+                        matches: Fields::Ordered(vec![Match::Const("THREE".to_string())]),
+                    },
+                    body: vec![
+                        Clause {
+                            pred_name: "bar".to_string(),
+                            matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
+                        },
+                        Clause {
+                            pred_name: "baz".to_string(),
+                            matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
+                        },
+                    ],
+                },
+            ],
+        };
+        assert_eq!(Ok((prog, "")), program().parse(code));
     }
 }

@@ -63,10 +63,19 @@ impl Display for Query {
     }
 }
 
+impl Display for Rule {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "{}: {} <- ", self.name, self.head)?;
+        sep_by(" & ", &self.body, f)
+    }
+}
+
 impl Display for Program {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         sep_by("\n", &self.predicates, f)?;
         write!(f, "\n")?;
-        sep_by("\n", &self.queries, f)
+        sep_by("\n", &self.queries, f)?;
+        write!(f, "\n")?;
+        sep_by("\n", &self.rules, f)
     }
 }

@@ -25,6 +25,14 @@ impl Projection {
             inner: BTreeSet::new(),
         }
     }
+    fn take(&mut self) -> Self {
+        let mut out_inner = BTreeSet::new();
+        ::std::mem::swap(&mut self.inner, &mut out_inner);
+        Self {
+            perm: self.perm.clone(),
+            inner: out_inner,
+        }
+    }
     fn insert(&mut self, tup: &[usize]) {
         self.inner.insert(permute(&self.perm, &tup));
     }
@@ -60,6 +68,7 @@ pub struct Tuples {
     inner: Vec<Vec<usize>>,
     index: HashIndex<[usize]>,
     projections: HashMap<Vec<usize>, Projection>,
+    mailboxes: Vec<Projection>,
 }
 
 pub struct Rows<'a> {
@@ -103,6 +112,9 @@ impl Tuples {
             }
         }
     }
+    pub fn mailbox(&mut self, mailbox: usize) -> Projection {
+        self.mailboxes[mailbox].take()
+    }
     pub fn register_projection(&mut self, fields: &[usize]) {
         if self.projections.contains_key(fields) {
             return;
@@ -112,6 +124,15 @@ impl Tuples {
             projection.insert(&self.get_unchecked(i))
         }
         self.projections.insert(fields.iter().cloned().collect(), projection);
+    }
+    pub fn register_mailbox(&mut self, fields: &[usize]) -> usize {
+        // TODO: dedup between this and register_projection
+        let mut projection = Projection::new(fields);
+        for i in 0..self.len() {
+            projection.insert(&self.get_unchecked(i))
+        }
+        self.mailboxes.push(projection);
+        self.mailboxes.len() - 1
     }
     pub fn new(arity: usize) -> Self {
         assert!(arity > 0);
@@ -123,6 +144,7 @@ impl Tuples {
             inner: inner,
             index: HashIndex::new(),
             projections: HashMap::new(),
+            mailboxes: Vec::new(),
         }
     }
     pub fn arity(&self) -> usize {
@@ -157,6 +179,9 @@ impl Tuples {
                 }
                 for proj in self.projections.values_mut() {
                     proj.insert(val)
+                }
+                for mailbox in self.mailboxes.iter_mut() {
+                    mailbox.insert(val)
                 }
                 (key, true)
             }

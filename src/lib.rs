@@ -1,4 +1,5 @@
 #![deny(missing_docs)]
+#![recursion_limit="128"]
 //! `mycroft` is an in-memory, Datalog + callbacks library.
 //!
 //! Currently, all it can do is parse predicates.

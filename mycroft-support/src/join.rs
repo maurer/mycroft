@@ -51,7 +51,7 @@ impl Restrict {
 
 pub struct Join<'a> {
     indices: Vec<&'a mut SkipIterator>,
-    restricts: HashMap<Field, Restrict>,
+    restricts: &'a HashMap<Field, Restrict>,
     candidate: Vec<usize>,
     candidate_len: Vec<usize>,
 }
@@ -76,7 +76,7 @@ fn min_possible(
 }
 
 impl <'a> Join<'a> {
-    pub fn new(indices: Vec<&'a mut SkipIterator>, restricts: HashMap<Field, Restrict>) -> Self {
+    pub fn new(indices: Vec<&'a mut SkipIterator>, restricts: &'a HashMap<Field, Restrict>) -> Self {
         let mut join = Join {
             indices: indices,
             restricts: restricts,

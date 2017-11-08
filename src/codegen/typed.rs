@@ -47,3 +47,8 @@ pub fn store(type_: &str, expr: &quote::Tokens) -> quote::Tokens {
 pub fn name(type_: &str) -> Ident {
     Ident::new(format!("data_{}", type_.to_lowercase()))
 }
+
+// Gives a standard name to a field to hold the precomputed key for a constant
+pub fn const_name(const_name: &str) -> Ident {
+    Ident::new(format!("k_{}", const_name.to_lowercase()))
+}

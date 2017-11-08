@@ -4,10 +4,12 @@
 use ir;
 use quote;
 use syn::{Ident, Lit, IntTy};
+use std::collections::HashMap;
 
 mod typed;
 mod query;
 mod predicate;
+mod rule;
 
 /// Transforms a complete Mycroft program in IR form into code to include in a user program
 pub fn program(prog: &ir::Program) -> quote::Tokens {
@@ -36,6 +38,11 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         query_funcs.push(gen.impls);
         query_registrations.push(gen.init)
     }
+
+    let rule_funcs = prog.rules
+        .values()
+        .map(|rule| rule::gen(rule))
+        .collect::<Vec<_>>();
 
     let pred_names = prog.predicates
         .values()
@@ -77,6 +84,36 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         .values()
         .map(|pred| Lit::Int(pred.types.len() as u64, IntTy::Usize))
         .collect::<Vec<_>>();
+
+    // Map from constant name to constant type
+    let mut consts: HashMap<String, String> = HashMap::new();
+    for (k, type_) in prog.queries.values().flat_map(|query| {
+        query::consts(query, &prog.predicates)
+    })
+    {
+        consts.insert(k, type_);
+    }
+    for (k, type_) in prog.rules.values().flat_map(|rule| {
+        rule::consts(rule, &prog.predicates)
+    })
+    {
+        consts.insert(k, type_);
+    }
+
+    let mut k_names: Vec<Ident> = Vec::new();
+    let mut k_inits: Vec<quote::Tokens> = Vec::new();
+    for (k, type_) in consts.into_iter() {
+        let k_name = typed::const_name(&k);
+        let k_ident = Ident::new(k);
+        let k_expr = quote! { #k_ident };
+        let k_store = typed::store(&type_, &k_expr);
+        k_names.push(k_name.clone());
+        k_inits.push(quote! {
+            db.#k_name = #k_store;
+        });
+    }
+    let k_names2 = k_names.clone();
+
     // TODO add naming feature for program so that mycroft can be invoked multiple times
     // in the same module.
     quote! {
@@ -94,6 +131,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                 #(#pred_names: Tuples,)*
                 #(#data_type_names: Data<#type_names>,)*
                 #(#query_storage_names: QueryStorage,)*
+                #(#k_names: usize,)*
             }
             #(#pred_fact_decls)*
             #(#query_structs)*
@@ -103,12 +141,16 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                         #(#pred_names2: Tuples::new(#arities),)*
                         #(#data_type_names2: Data::new(),)*
                         #(#query_storage_names2: QueryStorage::default(),)*
+                        #(#k_names2: ::std::usize::MAX,)*
                     };
+                    // Constants must be initialized first, they are used in other initialization
+                    #(#k_inits)*
                     #(#query_registrations)*
                     db
                 }
                 #(#pred_inserts)*
                 #(#query_funcs)*
+                #(#rule_funcs)*
             }
         }
     }

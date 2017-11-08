@@ -111,6 +111,8 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     }
     let k_names2 = k_names.clone();
 
+    let rule_invokes: Vec<Ident> = prog.rules.values().map(rule::names::rule_invoke).collect();
+
     // TODO add naming feature for program so that mycroft can be invoked multiple times
     // in the same module.
     quote! {
@@ -144,6 +146,13 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     #(#k_inits)*
                     #(#query_registrations)*
                     db
+                }
+                pub fn run_rules(&mut self) {
+                    let mut productive = true;
+                    while productive {
+                        productive = false;
+                        #(productive |= self.#rule_invokes();)*
+                    }
                 }
                 #(#pred_inserts)*
                 #(#query_funcs)*

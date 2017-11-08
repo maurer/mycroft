@@ -55,6 +55,31 @@ pub mod error {
                 description("Clause bound predicate field which is not defined"),
                 display("Tried to bind {}, which is not defined in {:?}", field, pred),
             }
+            #[doc = "Used an unbound match in a head field"]
+            UnboundHeadField(rule: ast::Rule) {
+                description("Used an unbound match in a head field"),
+                display("Unbound field in head in rule {}", rule),
+            }
+            #[doc = "Rule creates fact in undefined predicate"]
+            HeadPredUndefined(rule: ast::Rule) {
+                description("Rule creates fact in undefined predicate"),
+                display("Head predicate not defined in {}", rule),
+            }
+            #[doc = "Rule variable does not match the required type in head predicate"]
+            HeadTypeMismatch(rule: ast::Rule, var: String, type_: String) {
+                description("Rule variable does not match the type in the head"),
+                display("In '{}', '{}' does not have the required type '{}'", rule, var, type_),
+            }
+            #[doc = "Two rules were defined with the same name"]
+            RuleDefinedTwice(rule0: ast::Rule, rule1: ast::Rule) {
+                description("Two rules were defined with the same name"),
+                display("One of '{}' and '{}' must be renamed.", rule0, rule1),
+            }
+            #[doc = "Variable not found in search area."]
+            VarNotFound(hay: Vec<String>, needle: String) {
+                description("Variable not found when looking up definition"),
+                display("{:?} not found in {:?}", needle, hay),
+            }
         }
     }
 }
@@ -130,6 +155,93 @@ pub struct Query {
     pub eq: HashMap<QueryField, String>,
     /// For each predicate, how it should be projected in the ordering
     pub gao: Vec<Vec<usize>>,
+}
+
+/// Values usable in a head clause
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HeadVal {
+    /// nth variable returned by the generated query
+    Var(usize),
+    /// Constant specified by the identifier
+    Const(String),
+}
+
+/// IR Rule Representation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rule {
+    /// Rule name
+    pub name: String,
+    /// Rule AST, for error reporting
+    pub ast: ast::Rule,
+    /// Name of generated query, returned alongside production of rule, to represent body
+    /// condition
+    pub body_query: String,
+    /// Name of predicate to be used for the head
+    pub head_pred: String,
+    /// List of variables or constants to be used instantiating the head
+    pub head_vals: Vec<HeadVal>,
+}
+
+fn find_var(hay: &[String], needle: &str) -> Result<usize> {
+    for (idx, s) in hay.iter().enumerate() {
+        if s == needle {
+            return Ok(idx);
+        }
+    }
+    Err(
+        ErrorKind::VarNotFound(hay.to_vec(), needle.to_string()).into(),
+    )
+}
+
+impl Rule {
+    fn from_ast(
+        ast: ast::Rule,
+        preds: &HashMap<String, Predicate>,
+        queries: &mut HashMap<String, Query>,
+    ) -> Result<Self> {
+        // Generate a fake ast to make a query out of
+        let query_name = format!("MYCROFT_INTERNAL__rule__{}", ast.name);
+        // We can do collision avoidance later, but for now, if you're using double
+        // underscores on your query name, you're probably just sabotaging yourself
+        assert!(!queries.contains_key(&query_name));
+        let query_ast = ast::Query {
+            name: query_name.clone(),
+            clauses: ast.body.clone(),
+        };
+        let query = Query::from_ast(query_ast, preds)?;
+        let head_pred = ast.head.pred_name.clone();
+        let pred = match preds.get(&head_pred) {
+            Some(pred) => pred,
+            None => return Err(ErrorKind::HeadPredUndefined(ast).into()),
+        };
+        let mut head_vals = Vec::new();
+        for (head_field, match_) in idx_form(pred, &ast.head.matches)? {
+            head_vals.push(match match_ {
+                ast::Match::Const(ref k) => HeadVal::Const(k.clone()),
+                ast::Match::Var(ref v) => {
+                    let var = find_var(&query.vars, v).chain_err(
+                        || "Head clause var lookup",
+                    )?;
+                    if query.types[v] != pred.types[head_field] {
+                        return Err(
+                            ErrorKind::HeadTypeMismatch(ast, v.clone(), query.types[v].clone())
+                                .into(),
+                        );
+                    }
+                    HeadVal::Var(var)
+                }
+                ast::Match::Unbound => return Err(ErrorKind::UnboundHeadField(ast).into()),
+            });
+        }
+        queries.insert(query_name.clone(), query);
+        Ok(Rule {
+            name: ast.name.clone(),
+            ast: ast,
+            body_query: query_name,
+            head_pred: head_pred,
+            head_vals: head_vals,
+        })
+    }
 }
 
 fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(usize, T)>> {
@@ -305,11 +417,14 @@ pub struct Program {
     pub predicates: HashMap<String, Predicate>,
     /// Map from query name to IR query
     pub queries: HashMap<String, Query>,
+    /// Map from rule name to IR rule
+    pub rules: HashMap<String, Rule>,
 }
 
 impl Program {
     /// Generate a program IR from an AST
     pub fn from_ast(ast: ast::Program) -> Result<Self> {
+        //TODO: this is repetative, dedup it
         let mut predicates: HashMap<String, Predicate> = HashMap::new();
         for ast_pred in ast.predicates {
             let ir_pred = Predicate::from_ast(ast_pred);
@@ -332,9 +447,21 @@ impl Program {
             queries.insert(ir_query.name.clone(), ir_query);
         }
 
+        let mut rules: HashMap<String, Rule> = HashMap::new();
+        for ast_rule in ast.rules {
+            let ir_rule = Rule::from_ast(ast_rule, &predicates, &mut queries)?;
+            if rules.contains_key(&ir_rule.name) {
+                let first = rules.remove(&ir_rule.name).unwrap().ast;
+                let second = ir_rule.ast;
+                return Err(ErrorKind::RuleDefinedTwice(first, second).into());
+            }
+            rules.insert(ir_rule.name.clone(), ir_rule);
+        }
+
         Ok(Program {
             predicates: predicates,
             queries: queries,
+            rules: rules,
         })
     }
 }

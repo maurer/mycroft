@@ -8,7 +8,6 @@ pub mod names {
     use ir;
     use syn::Ident;
     use super::super::predicate;
-    use std::collections::HashMap;
 
     // Name of query local storage
     pub fn store(query: &ir::Query) -> Ident {
@@ -25,17 +24,22 @@ pub mod names {
         Ident::new(format!("query_incr_{}", query.name.to_lowercase()))
     }
 
+    // Name of the incremental function producing tuples rather than facts
+    pub fn incr_tuple(query_name: &str) -> Ident {
+        Ident::new(format!("query_incr_tuple_{}", query_name.to_lowercase()))
+    }
+
     // Name of the query's result type
     pub fn result(query: &ir::Query) -> Ident {
         Ident::new(format!("{}Result", query.name))
     }
 
     // Name of the tuple storages needed for this query
-    pub fn tuples(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Vec<Ident> {
+    pub fn tuples(query: &ir::Query) -> Vec<Ident> {
         query
             .predicates
             .iter()
-            .map(|pred_name| predicate::names::tuple(&preds[pred_name]))
+            .map(|x| predicate::names::tuple(x))
             .collect()
     }
 
@@ -86,10 +90,7 @@ pub struct QueryOut {
 }
 
 // Generates all the projections for the predicates used in the query
-fn build_projs(
-    query: &ir::Query,
-    preds: &HashMap<String, ir::Predicate>,
-) -> (quote::Tokens, Vec<quote::Tokens>) {
+fn build_projs(query: &ir::Query) -> (quote::Tokens, Vec<quote::Tokens>) {
     let mut proj_nums = Vec::new();
     let build_projs = query
         .gao
@@ -101,7 +102,7 @@ fn build_projs(
                 .collect::<Vec<_>>();
             let nums = quote! { &[#(#raw_nums),*] };
             proj_nums.push(nums.clone());
-            let pred_name = predicate::names::tuple(&preds[&query.predicates[pred_id]]);
+            let pred_name = predicate::names::tuple(&query.predicates[pred_id]);
             let proj_i = names::proj(pred_id);
             quote! {
                 let #proj_i = self.#pred_name.projection(#nums);
@@ -221,20 +222,17 @@ fn gen_push_indices(query: &ir::Query) -> quote::Tokens {
 }
 
 // Make the full query
-fn gen_query(
-    query: &ir::Query,
-    preds: &HashMap<String, ir::Predicate>,
-) -> (quote::Tokens, quote::Tokens) {
+fn gen_query(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
     let result = names::result(query);
     let result2 = result.clone();
 
-    let (build_projs, proj_nums) = build_projs(query, preds);
+    let (build_projs, proj_nums) = build_projs(query);
     let build_idxs = build_idxs(query);
     let push_indices = gen_push_indices(query);
     let query_func = names::func(query);
     let query_store = names::store(query);
     let query_store2 = query_store.clone();
-    let tuples = names::tuples(query, preds);
+    let tuples = names::tuples(query);
     let restricts = restricts(query);
     (
         quote! {
@@ -299,10 +297,7 @@ fn gen_subjoin_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
 }
 
 // Builds the incremental query
-fn gen_incr(
-    query: &ir::Query,
-    preds: &HashMap<String, ir::Predicate>,
-) -> (quote::Tokens, quote::Tokens) {
+fn gen_incr(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
     // TODO: add reordering to subjoins so that they each use their own restrict and put their
     // mailbox as the first index to the joiner. This will likely involve work in the IR as
     // well to generate additional permutation/restriction combos - that logic doesn't belong
@@ -312,6 +307,8 @@ fn gen_incr(
     let query_result2 = query_result.clone();
 
     let query_incr_func = names::incr_func(query);
+    let query_incr_tuple_name = names::incr_tuple(&query.name);
+    let query_incr_tuple_name2 = query_incr_tuple_name.clone();
 
     let mut subjoin_names = Vec::new();
 
@@ -321,9 +318,9 @@ fn gen_incr(
         .map(|_| names::store(query))
         .collect::<Vec<_>>();
 
-    let tuples = names::tuples(query, preds);
+    let tuples = names::tuples(query);
 
-    let (build_base_projs, perms) = build_projs(query, preds);
+    let (build_base_projs, perms) = build_projs(query);
 
     let build_all_subjoins = {
         // Take your mail
@@ -379,10 +376,13 @@ fn gen_incr(
 
     (
         quote! {
-            pub fn #query_incr_func(&mut self) -> Vec<#query_result> {
+            fn #query_incr_tuple_name(&mut self) -> Vec<Vec<usize>> {
                 #build_all_subjoins
                 #first_subjoin#(.chain(#rest_subjoin))*
-                    .map(|tup| #query_result2::from_tuple(self, tup)).collect()
+                .collect()
+            }
+            pub fn #query_incr_func(&mut self) -> Vec<#query_result> {
+                self.#query_incr_tuple_name2().into_iter().map(|tup| #query_result2::from_tuple(self, tup)).collect()
             }
         },
         quote! {
@@ -391,9 +391,9 @@ fn gen_incr(
     )
 }
 
-pub fn gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> QueryOut {
-    let (query_func, query_init) = gen_query(query, preds);
-    let (incr_func, incr_init) = gen_incr(query, preds);
+pub fn gen(query: &ir::Query) -> QueryOut {
+    let (query_func, query_init) = gen_query(query);
+    let (incr_func, incr_init) = gen_incr(query);
     QueryOut {
         decls: decls(query),
         impls: quote! {
@@ -409,7 +409,7 @@ pub fn gen(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> QueryOu
 
 pub fn consts(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Vec<(String, String)> {
     let mut out = Vec::new();
-    for (qf, k_expr) in query.eq.iter() {
+    for (qf, k_expr) in &query.eq {
         let type_ = &preds[&query.predicates[qf.pred_id]].types[qf.field_id];
         out.push((k_expr.to_string(), type_.to_string()));
     }

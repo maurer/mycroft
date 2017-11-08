@@ -215,7 +215,9 @@ impl Rule {
             None => return Err(ErrorKind::HeadPredUndefined(ast).into()),
         };
         let mut head_vals = Vec::new();
-        for (head_field, match_) in idx_form(pred, &ast.head.matches)? {
+        let mut idxs = idx_form(pred, &ast.head.matches)?;
+        idxs.sort_by_key(|x| x.0);
+        for (head_field, match_) in idxs {
             head_vals.push(match match_ {
                 ast::Match::Const(ref k) => HeadVal::Const(k.clone()),
                 ast::Match::Var(ref v) => {

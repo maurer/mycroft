@@ -30,10 +30,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     let mut query_funcs = Vec::new();
     // Database initializaiton to make sure indices are present
     let mut query_registrations = Vec::new();
-    for gen in prog.queries.values().map(|query| {
-        query::gen(query, &prog.predicates)
-    })
-    {
+    for gen in prog.queries.values().map(|query| query::gen(query)) {
         query_structs.push(gen.decls);
         query_funcs.push(gen.impls);
         query_registrations.push(gen.init)
@@ -46,7 +43,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     let pred_names = prog.predicates
         .values()
-        .map(predicate::names::tuple)
+        .map(|pred| predicate::names::tuple(&pred.name))
         .collect::<Vec<_>>();
     let pred_names2 = pred_names.clone();
 
@@ -102,7 +99,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     let mut k_names: Vec<Ident> = Vec::new();
     let mut k_inits: Vec<quote::Tokens> = Vec::new();
-    for (k, type_) in consts.into_iter() {
+    for (k, type_) in consts {
         let k_name = typed::const_name(&k);
         let k_ident = Ident::new(k);
         let k_expr = quote! { #k_ident };

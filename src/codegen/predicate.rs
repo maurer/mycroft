@@ -35,8 +35,8 @@ pub mod names {
     }
 
     // Name of the field where the predicate's tuples are stored
-    pub fn tuple(pred: &ir::Predicate) -> Ident {
-        Ident::new(format!("pred_{}", pred.name.to_lowercase()))
+    pub fn tuple(pred_name: &str) -> Ident {
+        Ident::new(format!("pred_{}", pred_name.to_lowercase()))
     }
 }
 
@@ -97,7 +97,7 @@ pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
 pub fn insert(pred: &ir::Predicate) -> quote::Tokens {
     let insert_name = names::insert(pred);
     let fact_name = names::fact(pred);
-    let tuple_name = names::tuple(pred);
+    let tuple_name = names::tuple(&pred.name);
     quote! {
         pub fn #insert_name(&mut self, fact: #fact_name) -> usize {
             let tuple = fact.to_tuple(self);

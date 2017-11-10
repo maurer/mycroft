@@ -17,7 +17,7 @@ pub fn consts(rule: &ir::Rule, preds: &HashMap<String, ir::Predicate>) -> Vec<(S
     let pred = &preds[&rule.head_pred];
     let mut out = Vec::new();
     for (idx, hv) in rule.head_vals.iter().enumerate() {
-        if let ir::HeadVal::Const(ref k) = *hv {
+        if let ir::MatchVal::Const(ref k) = *hv {
             out.push((k.to_string(), pred.types[idx].to_string()));
         }
     }
@@ -28,11 +28,11 @@ pub fn gen(rule: &ir::Rule) -> quote::Tokens {
     let tuple_subs: Vec<quote::Tokens> = rule.head_vals
         .iter()
         .map(|hv| match *hv {
-            ir::HeadVal::Const(ref k) => {
+            ir::MatchVal::Const(ref k) => {
                 let k = typed::const_name(k);
                 quote! { self.#k }
             }
-            ir::HeadVal::Var(v) => {
+            ir::MatchVal::Var(v) => {
                 let v = Lit::Int(v as u64, IntTy::Usize);
                 quote! { tuple[#v] }
             }

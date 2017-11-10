@@ -138,44 +138,31 @@ fn build_idxs(query: &ir::Query) -> quote::Tokens {
 
 // Generates an expression which evaluates to the restricts value for the intended join
 fn restricts(query: &ir::Query) -> quote::Tokens {
-    let mut fields = Vec::new();
     let mut restricts = Vec::new();
-    for (qf, v) in &query.unify {
-        let clause = Lit::Int(qf.pred_id as u64, IntTy::Usize);
-        let field = Lit::Int(qf.field_id as u64, IntTy::Usize);
-        let var = Lit::Int(*v as u64, IntTy::Usize);
-        fields.push(quote! {
-            Field {
-                clause: #clause,
-                field: #field,
+    for row in &query.matches {
+        let mut row_out = Vec::new();
+        for mr in row {
+            match *mr {
+                Some(ir::MatchVal::Var(ref v)) => {
+                    let var = Lit::Int(*v as u64, IntTy::Usize);
+                    row_out.push(quote! {
+                        Some(Restrict::Unify(#var))
+                    })
+                }
+                Some(ir::MatchVal::Const(ref k)) => {
+                    let k = typed::const_name(&k);
+                    row_out.push(quote! {
+                        Some(Restrict::Const(db.#k))
+                    })
+                }
+                None => row_out.push(quote! {None}),
             }
-        });
-        restricts.push(quote! {
-                Restrict::Unify(#var)
-            });
-    }
-    for (qf, k) in &query.eq {
-        let clause = Lit::Int(qf.pred_id as u64, IntTy::Usize);
-        let field = Lit::Int(qf.field_id as u64, IntTy::Usize);
-        fields.push(quote! {
-            Field {
-                clause: #clause,
-                field: #field,
-            }
-        });
-        let k = typed::const_name(k);
-        restricts.push(quote! {
-            Restrict::Const(db.#k)
-        });
-    }
-    quote! {
-        {
-            let mut restricts = HashMap::new();
-            #(restricts.insert(#fields, #restricts);)*
-            restricts
         }
+        restricts.push(quote! {
+            vec![#(#row_out),*]
+        });
     }
-
+    quote! { vec![#(#restricts),*] }
 }
 
 // Generates the structs + from_tuple for our result types
@@ -409,9 +396,13 @@ pub fn gen(query: &ir::Query) -> QueryOut {
 
 pub fn consts(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Vec<(String, String)> {
     let mut out = Vec::new();
-    for (qf, k_expr) in &query.eq {
-        let type_ = &preds[&query.predicates[qf.pred_id]].types[qf.field_id];
-        out.push((k_expr.to_string(), type_.to_string()));
+    for (pred_id, row) in query.matches.iter().enumerate() {
+        for (field_id, mk) in row.iter().enumerate() {
+            if let Some(ir::MatchVal::Const(ref k)) = *mk {
+                let type_ = &preds[&query.predicates[pred_id]].types[field_id];
+                out.push((k.clone(), type_.to_string()))
+            }
+        }
     }
     out
 }

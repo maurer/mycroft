@@ -147,19 +147,17 @@ pub struct Query {
     pub predicates: Vec<String>,
     /// Map between variable numbers and names
     pub vars: Vec<String>,
-    /// Map between fields and what variable they must unify with
-    pub unify: HashMap<QueryField, usize>,
+    /// Indexed by query, then field, what restrictions are on that coordinate
+    pub matches: Vec<Vec<Option<MatchVal>>>,
     /// Map between variables and their types
     pub types: HashMap<String, String>,
-    /// Equality constraints from a field to a value
-    pub eq: HashMap<QueryField, String>,
     /// For each predicate, how it should be projected in the ordering
     pub gao: Vec<Vec<usize>>,
 }
 
-/// Values usable in a head clause
+/// Values usable to describe a restriction or instantiation of a query variable
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HeadVal {
+pub enum MatchVal {
     /// nth variable returned by the generated query
     Var(usize),
     /// Constant specified by the identifier
@@ -179,7 +177,7 @@ pub struct Rule {
     /// Name of predicate to be used for the head
     pub head_pred: String,
     /// List of variables or constants to be used instantiating the head
-    pub head_vals: Vec<HeadVal>,
+    pub head_vals: Vec<MatchVal>,
 }
 
 fn find_var(hay: &[String], needle: &str) -> Result<usize> {
@@ -219,7 +217,7 @@ impl Rule {
         idxs.sort_by_key(|x| x.0);
         for (head_field, match_) in idxs {
             head_vals.push(match match_ {
-                ast::Match::Const(ref k) => HeadVal::Const(k.clone()),
+                ast::Match::Const(ref k) => MatchVal::Const(k.clone()),
                 ast::Match::Var(ref v) => {
                     let var = find_var(&query.vars, v).chain_err(
                         || "Head clause var lookup",
@@ -230,7 +228,7 @@ impl Rule {
                                 .into(),
                         );
                     }
-                    HeadVal::Var(var)
+                    MatchVal::Var(var)
                 }
                 ast::Match::Unbound => return Err(ErrorKind::UnboundHeadField(ast).into()),
             });
@@ -399,14 +397,35 @@ impl Query {
             eq.insert(permute(&gao, qf), k.clone());
         }
 
+        // Flatten the map for consumption by Join
+        let mut matches = Vec::new();
+        for (pid, fid_order) in gao.iter().enumerate() {
+            let mut row = Vec::new();
+            for fid in 0..fid_order.len() {
+                let qf = QueryField {
+                    pred_id: pid,
+                    field_id: fid,
+                };
+                if let Some(var) = unify.get(&qf) {
+                    row.push(Some(MatchVal::Var(*var)));
+                    continue;
+                }
+                if let Some(k) = eq.get(&qf) {
+                    row.push(Some(MatchVal::Const(k.clone())));
+                    continue;
+                }
+                row.push(None);
+            }
+            matches.push(row);
+        }
+
         Ok(Query {
             name: name,
             ast: ast,
             predicates: predicates,
             vars: vars,
-            unify: unify,
+            matches: matches,
             types: types,
-            eq: eq,
             gao: gao,
         })
     }

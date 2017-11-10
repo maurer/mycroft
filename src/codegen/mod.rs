@@ -120,11 +120,10 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             #![allow(unused_imports,dead_code,unused_variables,unused_mut)]
             use mycroft_support::storage::{Tuples, Data};
             use mycroft_support::join::{Join, SkipIterator, Field, Restrict};
-            use std::collections::HashMap;
             #[derive(Default)]
             struct QueryStorage {
                 mailboxes: Vec<usize>,
-                restricts: HashMap<Field, Restrict>,
+                restricts: Vec<Vec<Option<Restrict>>>,
             }
             pub struct Database {
                 #(#pred_names: Tuples,)*

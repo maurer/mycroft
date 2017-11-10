@@ -1,6 +1,5 @@
 //! `join` implements a simple indexed join with the assumption of a global attribute order. This
 //! is likely not the optimal join, but it will get us started.
-use std::collections::HashMap;
 /// Shorthand for a variable length tuple
 pub type Tuple = Vec<usize>;
 /// A `SkipIterator` is like a normal iterator, but:
@@ -76,27 +75,19 @@ impl Restrict {
 /// A join iterator, made of multiple `SkipIterators`, combined with the join condition.
 pub struct Join<'a> {
     indices: Vec<&'a mut SkipIterator>,
-    restricts: &'a HashMap<Field, Restrict>,
+    restricts: &'a Vec<Vec<Option<Restrict>>>,
     // Currently selected variable assignment
     candidate: Vec<usize>,
     // Stack of previous variable assignment lengths so we can rewind choices
     candidate_len: Vec<usize>,
 }
 
-fn min_possible(
-    candidate: &Vec<usize>,
-    restricts: &HashMap<Field, Restrict>,
-    clause_index: usize,
-    clause_arity: usize,
-) -> Vec<usize> {
+fn min_possible(candidate: &Vec<usize>, restricts: &Vec<Option<Restrict>>) -> Vec<usize> {
     let mut out = Vec::new();
-    for field in 0..clause_arity {
-        match restricts.get(&Field {
-            clause: clause_index,
-            field: field,
-        }) {
+    for mr in restricts.iter() {
+        match *mr {
             None => out.push(0),
-            Some(r) => out.push(r.min(candidate)),
+            Some(ref r) => out.push(r.min(candidate)),
         }
     }
     out
@@ -115,7 +106,7 @@ impl<'a> Join<'a> {
     ///     the map
     pub fn new(
         indices: Vec<&'a mut SkipIterator>,
-        restricts: &'a HashMap<Field, Restrict>,
+        restricts: &'a Vec<Vec<Option<Restrict>>>,
     ) -> Self {
         let mut join = Join {
             indices: indices,
@@ -138,8 +129,7 @@ impl<'a> Join<'a> {
     // and checking restrictions
     fn right(&mut self) {
         let n = self.candidate_len.len();
-        let arity = self.indices[n].arity();
-        self.indices[n].skip(min_possible(&self.candidate, &self.restricts, n, arity));
+        self.indices[n].skip(min_possible(&self.candidate, &self.restricts[n]));
     }
 }
 impl<'a> Iterator for Join<'a> {
@@ -156,10 +146,7 @@ impl<'a> Iterator for Join<'a> {
                 Some(tup) => {
                     for (f, v) in tup.into_iter().enumerate() {
                         let mut left_out = false;
-                        match self.restricts.get(&Field {
-                            clause: n,
-                            field: f,
-                        }) {
+                        match self.restricts[n][f] {
                             Some(r) => {
                                 if !r.check(&mut self.candidate, v) {
                                     if n == 0 {
@@ -241,43 +228,18 @@ mod test {
         }
     }
     use super::*;
-    use std::collections::HashMap;
 
     #[test]
     fn simple_join() {
+        use self::Restrict::*;
         let mut p = TrivialIterator::new(vec![vec![0, 2, 3], vec![3, 2, 5], vec![4, 4, 4]]);
         let mut q = TrivialIterator::new(vec![vec![1, 3], vec![2, 7], vec![3, 4], vec![8, 2]]);
+        let restricts = vec![
+            vec![Some(Unify(0)), Some(Unify(1)), None],
+            vec![Some(Unify(1)), Some(Const(7))],
+        ];
         let its: Vec<&mut SkipIterator> = vec![&mut p, &mut q];
-        let mut restricts = HashMap::new();
-        restricts.insert(
-            Field {
-                clause: 0,
-                field: 0,
-            },
-            Restrict::Unify(0),
-        );
-        restricts.insert(
-            Field {
-                clause: 0,
-                field: 1,
-            },
-            Restrict::Unify(1),
-        );
-        restricts.insert(
-            Field {
-                clause: 1,
-                field: 0,
-            },
-            Restrict::Unify(1),
-        );
-        restricts.insert(
-            Field {
-                clause: 1,
-                field: 1,
-            },
-            Restrict::Const(7),
-        );
-        let mut join = Join::new(its, restricts);
+        let mut join = Join::new(its, &restricts);
         assert_eq!(join.next(), Some(vec![0, 2]));
         assert_eq!(join.next(), Some(vec![3, 2]));
         assert_eq!(join.next(), None);

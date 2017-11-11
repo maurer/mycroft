@@ -16,6 +16,8 @@ pub trait SkipIterator {
     fn skip(&mut self, min: Tuple);
     /// Returns the arity of the tuples that will be returned by `next()`
     fn arity(&self) -> usize;
+    /// Returns the total length of the iterator, if it were fully rewound
+    fn len(&self) -> usize;
 }
 
 /// A field specifies a particular value in the join problem
@@ -41,13 +43,13 @@ pub enum Restrict {
 impl Restrict {
     // Checks whether a restriction is met, updating the candidate if it has a new variable
     // definition
-    fn check(&self, candidate: &mut Vec<usize>, val: usize) -> bool {
+    fn check(&self, candidate: &mut Vec<usize>, val: usize, order: &Vec<usize>) -> bool {
         match *self {
             Restrict::Const(v) => v == val,
             Restrict::Unify(var) => {
                 if var < candidate.len() {
-                    candidate[var] == val
-                } else if var == candidate.len() {
+                    candidate[order[var]] == val
+                } else if order[var] == candidate.len() {
                     candidate.push(val);
                     true
                 } else {
@@ -74,6 +76,12 @@ impl Restrict {
 
 /// A join iterator, made of multiple `SkipIterators`, combined with the join condition.
 pub struct Join<'a> {
+    // Order we're going to solve in
+    order: Vec<usize>,
+    // Based on the reorder of predicates, how to read the restricts as candidate idx
+    var_old_to_new: Vec<usize>,
+    // Based on the reorder of predicates, how to read candidates as outputs
+    var_new_to_old: Vec<usize>,
     indices: Vec<&'a mut SkipIterator>,
     restricts: &'a Vec<Vec<Option<Restrict>>>,
     // Currently selected variable assignment
@@ -93,6 +101,47 @@ fn min_possible(candidate: &Vec<usize>, restricts: &Vec<Option<Restrict>>) -> Ve
     out
 }
 
+// Provide an ordering for walking the SkipIterators that will do the smallest index at the
+// outside, and move in from there
+fn reorder_indices(indices: &Vec<&mut SkipIterator>) -> Vec<usize> {
+    let mut lens: Vec<(usize, usize)> = indices.iter().map(|x| x.len()).enumerate().collect();
+    lens.sort_by_key(|x| x.1);
+    lens.into_iter().map(|x| x.0).collect()
+}
+
+// Based on the ordering of iterators, renumber the variables
+fn reorder_vars(
+    order: &[usize],
+    restricts: &[Vec<Option<Restrict>>],
+) -> (Vec<usize>, Vec<usize>) {
+    let max_var_len: usize = restricts
+        .iter()
+        .flat_map(|pred| pred.iter().flat_map(|mr| mr.iter()))
+        .filter_map(|r| if let Restrict::Unify(var) = *r {
+            Some(var)
+        } else {
+            None
+        })
+        .max()
+        // If we have a max_var, we need one more than it for space
+        .map(|x| x + 1)
+        // If we have no restricts, we have no variables - this could happen for a constant query
+        .unwrap_or(0);
+    let mut new_to_old = Vec::new();
+    let mut old_to_new = vec![0; max_var_len];
+    for idx in order {
+        for mr in &restricts[*idx] {
+            if let Some(Restrict::Unify(var)) = *mr {
+                if !new_to_old.contains(&var) {
+                    old_to_new[var] = new_to_old.len();
+                    new_to_old.push(var);
+                }
+            }
+        }
+    }
+    (old_to_new, new_to_old)
+}
+
 impl<'a> Join<'a> {
     /// Creates a new join iterator:
     ///
@@ -108,7 +157,12 @@ impl<'a> Join<'a> {
         indices: Vec<&'a mut SkipIterator>,
         restricts: &'a Vec<Vec<Option<Restrict>>>,
     ) -> Self {
+        let order = reorder_indices(&indices);
+        let (var_old_to_new, var_new_to_old) = reorder_vars(&order, restricts);
         let mut join = Join {
+            order: order,
+            var_old_to_new: var_old_to_new,
+            var_new_to_old: var_new_to_old,
             indices: indices,
             restricts: restricts,
             candidate: Vec::new(),
@@ -128,7 +182,7 @@ impl<'a> Join<'a> {
     // Moves one iterator right, e.g. this one matched, and we need to finish filling the candidate
     // and checking restrictions
     fn right(&mut self) {
-        let n = self.candidate_len.len();
+        let n = self.order[self.candidate_len.len()];
         self.indices[n].skip(min_possible(&self.candidate, &self.restricts[n]));
     }
 }
@@ -140,7 +194,7 @@ impl<'a> Iterator for Join<'a> {
         // 2.) All indices less than the current index are coherent, and their candidate values are in candidate
         // 3.) The current index is at least past the minimum possible advancement level (this needs to be set up in new())
         'states: loop {
-            let n = self.candidate_len.len();
+            let n = self.order[self.candidate_len.len()];
             self.candidate_len.push(self.candidate.len());
             match self.indices[n].next() {
                 Some(tup) => {
@@ -148,8 +202,8 @@ impl<'a> Iterator for Join<'a> {
                         let mut left_out = false;
                         match self.restricts[n][f] {
                             Some(r) => {
-                                if !r.check(&mut self.candidate, v) {
-                                    if n == 0 {
+                                if !r.check(&mut self.candidate, v, &self.var_old_to_new) {
+                                    if n == self.order[0] {
                                         self.candidate.truncate(self.candidate_len.pop().unwrap());
                                         return None;
                                     }
@@ -165,7 +219,10 @@ impl<'a> Iterator for Join<'a> {
                     }
                     if self.candidate_len.len() == self.indices.len() {
                         // We have a complete candidate
-                        let out = self.candidate.clone();
+                        let mut out = Vec::new();
+                        for idx in &self.var_new_to_old {
+                            out.push(self.candidate[*idx])
+                        }
                         self.candidate.truncate(self.candidate_len.pop().unwrap());
                         return Some(out);
                     }
@@ -173,7 +230,7 @@ impl<'a> Iterator for Join<'a> {
                     self.right();
                 }
                 None => {
-                    if n == 0 {
+                    if n == self.order[0] {
                         self.candidate.truncate(self.candidate_len.pop().unwrap());
                         return None;
                     }
@@ -226,6 +283,9 @@ mod test {
         fn arity(&self) -> usize {
             self.payload[0].len()
         }
+        fn len(&self) -> usize {
+            self.payload.len()
+        }
     }
     use super::*;
 
@@ -244,5 +304,18 @@ mod test {
         assert_eq!(join.next(), Some(vec![3, 2]));
         assert_eq!(join.next(), None);
         assert_eq!(join.next(), None);
+    }
+
+    #[test]
+    fn reorder_vars_flip() {
+        use self::Restrict::*;
+        let order = &[0, 1];
+        let order_flip = &[1, 0];
+        let restrict_flip = vec![
+            vec![Some(Unify(0)), Some(Unify(1))],
+            vec![Some(Unify(1)), Some(Unify(0))]
+        ];
+        assert_eq!(&reorder_vars(order, &restrict_flip).0, &[0, 1]);
+        assert_eq!(&reorder_vars(order_flip, &restrict_flip).0, &[1, 0]);
     }
 }

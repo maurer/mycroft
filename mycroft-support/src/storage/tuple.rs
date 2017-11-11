@@ -43,6 +43,9 @@ impl Projection {
     fn arity(&self) -> usize {
         self.perm.len()
     }
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
     /// Creates a `SkipIterator` for the `Projection`
     pub fn skip_iter<'a>(&'a self) -> ProjectionIter<'a> {
         ProjectionIter {
@@ -67,6 +70,9 @@ impl<'a> SkipIterator for ProjectionIter<'a> {
     }
     fn arity(&self) -> usize {
         self.proj.arity()
+    }
+    fn len(&self) -> usize {
+        self.proj.len()
     }
 }
 

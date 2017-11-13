@@ -11,6 +11,22 @@ mod query;
 mod predicate;
 mod rule;
 
+fn camelize(s: &str) -> String {
+    let mut out_chars = Vec::new();
+    let mut new_word = true;
+    for c in s.chars() {
+        match c {
+            '_' => new_word = true,
+            c if new_word => {
+                new_word = false;
+                out_chars.extend(c.to_uppercase());
+            }
+            c => out_chars.push(c),
+        }
+    }
+    out_chars.iter().collect()
+}
+
 /// Transforms a complete Mycroft program in IR form into code to include in a user program
 pub fn program(prog: &ir::Program) -> quote::Tokens {
     use std::collections::HashSet;

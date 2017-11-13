@@ -198,7 +198,7 @@ impl Rule {
         queries: &mut HashMap<String, Query>,
     ) -> Result<Self> {
         // Generate a fake ast to make a query out of
-        let query_name = format!("MYCROFT_INTERNAL__rule__{}", ast.name);
+        let query_name = format!("mycroft_internal_rule_{}", ast.name);
         // We can do collision avoidance later, but for now, if you're using double
         // underscores on your query name, you're probably just sabotaging yourself
         assert!(!queries.contains_key(&query_name));

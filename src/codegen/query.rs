@@ -8,6 +8,7 @@ pub mod names {
     use ir;
     use syn::Ident;
     use super::super::predicate;
+    use codegen::camelize;
 
     // Name of query local storage
     pub fn store(query: &ir::Query) -> Ident {
@@ -31,7 +32,7 @@ pub mod names {
 
     // Name of the query's result type
     pub fn result(query: &ir::Query) -> Ident {
-        Ident::new(format!("{}Result", query.name))
+        Ident::new(format!("{}Result", camelize(&query.name)))
     }
 
     // Name of the tuple storages needed for this query

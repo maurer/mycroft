@@ -9,6 +9,7 @@ use super::typed;
 pub mod names {
     use ir;
     use syn::Ident;
+    use codegen::camelize;
 
     // Fields of a predicate, using native names if present, or arg0-argN if not
     pub fn fields(pred: &ir::Predicate) -> Vec<Ident> {
@@ -26,7 +27,7 @@ pub mod names {
 
     // Name of a predicate's fact type
     pub fn fact(pred: &ir::Predicate) -> Ident {
-        Ident::new(pred.name.clone())
+        Ident::new(camelize(&pred.name))
     }
 
     // Name of a predicate's insertion function

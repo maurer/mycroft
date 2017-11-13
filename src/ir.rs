@@ -178,6 +178,10 @@ pub struct Rule {
     pub head_pred: String,
     /// List of variables or constants to be used instantiating the head
     pub head_vals: Vec<MatchVal>,
+    /// Function to call to fill in the rest of the variables
+    pub func: Option<String>,
+    /// List of variables which should be defined by the function
+    pub func_vars: Vec<String>,
 }
 
 fn find_var(hay: &[String], needle: &str) -> Result<usize> {
@@ -213,25 +217,34 @@ impl Rule {
             None => return Err(ErrorKind::HeadPredUndefined(Box::new(ast)).into()),
         };
         let mut head_vals = Vec::new();
+        let mut func_vars = Vec::new();
         let mut idxs = idx_form(pred, &ast.head.matches)?;
         idxs.sort_by_key(|x| x.0);
         for (head_field, match_) in idxs {
             head_vals.push(match match_ {
                 ast::Match::Const(ref k) => MatchVal::Const(k.clone()),
                 ast::Match::Var(ref v) => {
-                    let var = find_var(&query.vars, v).chain_err(
-                        || "Head clause var lookup",
-                    )?;
-                    if query.types[v] != pred.types[head_field] {
-                        return Err(
-                            ErrorKind::HeadTypeMismatch(
-                                Box::new(ast),
-                                v.clone(),
-                                query.types[v].clone(),
-                            ).into(),
-                        );
+                    match find_var(&query.vars, v).chain_err(|| "Head clause var lookup") {
+                        Ok(var) => {
+                            if query.types[v] != pred.types[head_field] {
+                                return Err(
+                                    ErrorKind::HeadTypeMismatch(
+                                        Box::new(ast),
+                                        v.clone(),
+                                        query.types[v].clone(),
+                                    ).into(),
+                                );
+                            }
+                            MatchVal::Var(var)
+                        }
+                        Err(_) if ast.func.is_some() => {
+                            // The variable is undefined, and should be defined by the function
+                            let var = func_vars.len() + query.vars.len();
+                            func_vars.push(v.to_string());
+                            MatchVal::Var(var)
+                        }
+                        Err(e) => return Err(e),
                     }
-                    MatchVal::Var(var)
                 }
                 ast::Match::Unbound => {
                     return Err(ErrorKind::UnboundHeadField(Box::new(ast)).into())
@@ -241,6 +254,8 @@ impl Rule {
         queries.insert(query_name.clone(), query);
         Ok(Rule {
             name: ast.name.clone(),
+            func: ast.func.clone(),
+            func_vars: func_vars,
             ast: ast,
             body_query: query_name,
             head_pred: head_pred,

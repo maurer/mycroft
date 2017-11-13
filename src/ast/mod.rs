@@ -89,4 +89,6 @@ pub struct Rule {
     pub head: Clause,
     /// Set of clauses which must unify to provide input to the head
     pub body: Vec<Clause>,
+    /// Function to be called on bound body clause variables to produce head solutions
+    pub func: Option<String>
 }

@@ -66,7 +66,11 @@ impl Display for Query {
 impl Display for Rule {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(f, "{}: {} <- ", self.name, self.head)?;
-        sep_by(" & ", &self.body, f)
+        sep_by(" & ", &self.body, f)?;
+        if let Some(ref func) = self.func {
+            write!(f, " + {}", func)?;
+        }
+        Ok(())
     }
 }
 

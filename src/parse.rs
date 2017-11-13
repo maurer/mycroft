@@ -2,7 +2,7 @@
 #![cfg_attr(feature = "cargo-clippy", allow(unneeded_field_pattern))]
 //! Provides parsing functions for the Mycroft language.
 use ast::*;
-use combine::{Parser, many, between, sep_by1, try};
+use combine::{Parser, many, between, sep_by1, try, optional};
 use combine::char::{letter, spaces, char, digit, string};
 use combine::primitives::Stream;
 
@@ -131,10 +131,12 @@ parser! {
         let rule_name = ident();
         let rule_head = clause();
         let rule_body = sep_by1(clause(), lex_char('&'));
-        (rule_name, lex_char(':'), rule_head, lex_str("<-"), rule_body).map(|r| Rule {
+        let func = optional((lex_char('+'), ident()).map(|f| f.1));
+        (rule_name, lex_char(':'), rule_head, lex_str("<-"), rule_body, func).map(|r| Rule {
             name: r.0,
             head: r.2,
-            body: r.4
+            body: r.4,
+            func: r.5 
         })
     }
 }
@@ -286,9 +288,59 @@ mod test {
                             matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
                         },
                     ],
+                    func: None,
                 },
             ],
         };
         assert_eq!(Ok((prog, "")), program().parse(code));
     }
+
+    #[test]
+    fn with_func() {
+        let code = r#"
+            bar(bang)
+            baz(bang)
+            out(usize)
+            eq_sig: out(y) <- bar(x) & baz(x) + usizify
+        "#;
+        let prog = Program {
+            predicates: vec![
+                Predicate {
+                    name: "bar".to_string(),
+                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                },
+                Predicate {
+                    name: "baz".to_string(),
+                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                },
+                Predicate {
+                    name: "out".to_string(),
+                    fields: Fields::Ordered(vec!["usize".to_string()]),
+                },
+            ],
+            queries: vec![],
+            rules: vec![
+                Rule {
+                    name: "eq_sig".to_string(),
+                    head: Clause {
+                        pred_name: "out".to_string(),
+                        matches: Fields::Ordered(vec![Match::Var("y".to_string())]),
+                    },
+                    body: vec![
+                        Clause {
+                            pred_name: "bar".to_string(),
+                            matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
+                        },
+                        Clause {
+                            pred_name: "baz".to_string(),
+                            matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
+                        },
+                    ],
+                    func: Some("usizify".to_string()),
+                },
+            ],
+        };
+        assert_eq!(Ok((prog, "")), program().parse(code));
+    }
+
 }

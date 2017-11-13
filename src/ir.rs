@@ -13,65 +13,65 @@ pub mod error {
     error_chain! {
         errors {
             #[doc = "A predicate is defined twice"]
-            PredicateDefinedTwice(first: ast::Predicate, second: ast::Predicate) {
+            PredicateDefinedTwice(first: Box<ast::Predicate>, second: Box<ast::Predicate>) {
                 description("Predicate defined twice."),
                 display("{} already defined as {}", second, first),
             }
             #[doc = "A query is defined twice"]
-            QueryDefinedTwice(first: ast::Query, second: ast::Query) {
+            QueryDefinedTwice(first: Box<ast::Query>, second: Box<ast::Query>) {
                 description("Query defined twice."),
                 display("{} already defined as {}", second, first),
             }
             #[doc = "A query uses a predicate in its body which is not defined elsewhere"]
-            QueryUndefinedPredicate(ast: ast::Query, name: String) {
+            QueryUndefinedPredicate(ast: Box<ast::Query>, name: String) {
                 description("Query uses undefined predicate"),
                 display("Predicate {:?} not defined for query {}", name, ast)
             }
             #[doc = "A query attempts to unify two fields of different types onto the same \
                      variable"]
-            QueryTypeMismatch(ast: ast::Query, var: String, type_0: String, type_1: String) {
+            QueryTypeMismatch(ast: Box<ast::Query>, var: String, type_0: String, type_1: String) {
                 description("Query unifies variable at two or more types"),
                 display("Query {} attempts to unify {} at multiple types, first {} and then {}",
                         ast, var, type_0, type_1)
             }
             #[doc = "A clause tried to match an ordered predicate with the wrong number of fields"]
-            ShortClause(pred: super::Predicate, len: usize) {
+            ShortClause(pred: Box<super::Predicate>, len: usize) {
                 description("Clause had wrong field count when matching an ordered predicate"),
                 display("Tried to match {:?} with {} fields", pred, len),
             }
             #[doc = "A clause tried to match with named fields against an ordered predicate or \
                      vice versa"]
-            MatchStyle(pred: super::Predicate) {
+            MatchStyle(pred: Box<super::Predicate>) {
                 description("Clause matched against with wrong style"),
                 display("Tried to match against {:?} with an incompatible style", pred)
             }
             #[doc = "A predicate field was bound twice in the same clause"]
-            DoubleBind(pred: super::Predicate, field: String) {
+            DoubleBind(pred: Box<super::Predicate>, field: String) {
                 description("Clause bound predicate field twice or more"),
                 display("Tried to bind {} multiple times in {:?}", field, pred),
             }
             #[doc = "A clause references an undefined predicate field"]
-            UndefinedField(pred: super::Predicate, field: String) {
+            UndefinedField(pred: Box<super::Predicate>, field: String) {
                 description("Clause bound predicate field which is not defined"),
                 display("Tried to bind {}, which is not defined in {:?}", field, pred),
             }
             #[doc = "Used an unbound match in a head field"]
-            UnboundHeadField(rule: ast::Rule) {
+            UnboundHeadField(rule: Box<ast::Rule>) {
                 description("Used an unbound match in a head field"),
                 display("Unbound field in head in rule {}", rule),
             }
             #[doc = "Rule creates fact in undefined predicate"]
-            HeadPredUndefined(rule: ast::Rule) {
+            HeadPredUndefined(rule: Box<ast::Rule>) {
                 description("Rule creates fact in undefined predicate"),
                 display("Head predicate not defined in {}", rule),
             }
             #[doc = "Rule variable does not match the required type in head predicate"]
-            HeadTypeMismatch(rule: ast::Rule, var: String, type_: String) {
+            HeadTypeMismatch(rule: Box<ast::Rule>, var: String, type_: String) {
                 description("Rule variable does not match the type in the head"),
                 display("In '{}', '{}' does not have the required type '{}'", rule, var, type_),
             }
             #[doc = "Two rules were defined with the same name"]
-            RuleDefinedTwice(rule0: ast::Rule, rule1: ast::Rule) {
+            RuleDefinedTwice(rule0: Box<ast::Rule>, rule1: Box<ast::Rule>) {
                 description("Two rules were defined with the same name"),
                 display("One of '{}' and '{}' must be renamed.", rule0, rule1),
             }
@@ -210,7 +210,7 @@ impl Rule {
         let head_pred = ast.head.pred_name.clone();
         let pred = match preds.get(&head_pred) {
             Some(pred) => pred,
-            None => return Err(ErrorKind::HeadPredUndefined(ast).into()),
+            None => return Err(ErrorKind::HeadPredUndefined(Box::new(ast)).into()),
         };
         let mut head_vals = Vec::new();
         let mut idxs = idx_form(pred, &ast.head.matches)?;
@@ -224,13 +224,18 @@ impl Rule {
                     )?;
                     if query.types[v] != pred.types[head_field] {
                         return Err(
-                            ErrorKind::HeadTypeMismatch(ast, v.clone(), query.types[v].clone())
-                                .into(),
+                            ErrorKind::HeadTypeMismatch(
+                                Box::new(ast),
+                                v.clone(),
+                                query.types[v].clone(),
+                            ).into(),
                         );
                     }
                     MatchVal::Var(var)
                 }
-                ast::Match::Unbound => return Err(ErrorKind::UnboundHeadField(ast).into()),
+                ast::Match::Unbound => {
+                    return Err(ErrorKind::UnboundHeadField(Box::new(ast)).into())
+                }
             });
         }
         queries.insert(query_name.clone(), query);
@@ -250,22 +255,26 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
     match *fields {
         ast::Fields::Ordered(ref v) => {
             if pred.names.is_some() {
-                return Err(ErrorKind::MatchStyle(pred.clone()).into());
+                return Err(ErrorKind::MatchStyle(Box::new(pred.clone())).into());
             }
             if v.len() != pred.types.len() {
-                return Err(ErrorKind::ShortClause(pred.clone(), v.len()).into());
+                return Err(
+                    ErrorKind::ShortClause(Box::new(pred.clone()), v.len()).into(),
+                );
             }
             Ok(v.iter().cloned().enumerate().collect())
         }
         ast::Fields::Named(ref nm) => {
             if pred.names.is_none() {
-                return Err(ErrorKind::MatchStyle(pred.clone()).into());
+                return Err(ErrorKind::MatchStyle(Box::new(pred.clone())).into());
             }
             let mut seen_fields: HashSet<String> = HashSet::new();
             let mut out = Vec::new();
             for &ast::NamedField { ref name, ref val } in nm.iter() {
                 if seen_fields.contains(name) {
-                    return Err(ErrorKind::DoubleBind(pred.clone(), name.clone()).into());
+                    return Err(
+                        ErrorKind::DoubleBind(Box::new(pred.clone()), name.clone()).into(),
+                    );
                 }
                 seen_fields.insert(name.clone());
                 // This ugly bit of code just finds the index of the name present in the named
@@ -283,7 +292,9 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
                     .next()
                     .unwrap();
                 if fields.is_empty() {
-                    return Err(ErrorKind::UndefinedField(pred.clone(), name.clone()).into());
+                    return Err(
+                        ErrorKind::UndefinedField(Box::new(pred.clone()), name.clone()).into(),
+                    );
                 }
                 // This invariant should be handled in predicate construction, but it's cheap to
                 // check.
@@ -321,7 +332,8 @@ impl Query {
         for (idx, clause) in ast.clauses.clone().iter().enumerate() {
             if !preds.contains_key(&clause.pred_name) {
                 return Err(
-                    ErrorKind::QueryUndefinedPredicate(ast, clause.pred_name.clone()).into(),
+                    ErrorKind::QueryUndefinedPredicate(Box::new(ast), clause.pred_name.clone())
+                        .into(),
                 );
             }
             predicates.push(clause.pred_name.clone());
@@ -342,7 +354,7 @@ impl Query {
                         if qf_type != var_type {
                             return Err(
                                 ErrorKind::QueryTypeMismatch(
-                                    ast,
+                                    Box::new(ast),
                                     s.clone(),
                                     var_type.clone(),
                                     qf_type.clone(),
@@ -452,7 +464,9 @@ impl Program {
             if predicates.contains_key(&ir_pred.name) {
                 let first = predicates.remove(&ir_pred.name).unwrap().ast;
                 let second = ir_pred.ast;
-                return Err(ErrorKind::PredicateDefinedTwice(first, second).into());
+                return Err(
+                    ErrorKind::PredicateDefinedTwice(Box::new(first), Box::new(second)).into(),
+                );
             }
             predicates.insert(ir_pred.name.clone(), ir_pred);
         }
@@ -463,7 +477,9 @@ impl Program {
             if queries.contains_key(&ir_query.name) {
                 let first = queries.remove(&ir_query.name).unwrap().ast;
                 let second = ir_query.ast;
-                return Err(ErrorKind::QueryDefinedTwice(first, second).into());
+                return Err(
+                    ErrorKind::QueryDefinedTwice(Box::new(first), Box::new(second)).into(),
+                );
             }
             queries.insert(ir_query.name.clone(), ir_query);
         }
@@ -474,7 +490,9 @@ impl Program {
             if rules.contains_key(&ir_rule.name) {
                 let first = rules.remove(&ir_rule.name).unwrap().ast;
                 let second = ir_rule.ast;
-                return Err(ErrorKind::RuleDefinedTwice(first, second).into());
+                return Err(
+                    ErrorKind::RuleDefinedTwice(Box::new(first), Box::new(second)).into(),
+                );
             }
             rules.insert(ir_rule.name.clone(), ir_rule);
         }

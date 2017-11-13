@@ -151,7 +151,7 @@ fn restricts(query: &ir::Query) -> quote::Tokens {
                     })
                 }
                 Some(ir::MatchVal::Const(ref k)) => {
-                    let k = typed::const_name(&k);
+                    let k = typed::const_name(k);
                     row_out.push(quote! {
                         Some(Restrict::Const(db.#k))
                     })

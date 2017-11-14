@@ -182,6 +182,8 @@ pub struct Rule {
     pub func: Option<String>,
     /// List of variables which should be defined by the function
     pub func_vars: Vec<String>,
+    /// List of types for the function variables
+    pub func_types: Vec<String>,
 }
 
 fn find_var(hay: &[String], needle: &str) -> Result<usize> {
@@ -218,6 +220,7 @@ impl Rule {
         };
         let mut head_vals = Vec::new();
         let mut func_vars = Vec::new();
+        let mut func_types = Vec::new();
         let mut idxs = idx_form(pred, &ast.head.matches)?;
         idxs.sort_by_key(|x| x.0);
         for (head_field, match_) in idxs {
@@ -241,6 +244,7 @@ impl Rule {
                             // The variable is undefined, and should be defined by the function
                             let var = func_vars.len() + query.vars.len();
                             func_vars.push(v.to_string());
+                            func_types.push(pred.types[head_field].to_string());
                             MatchVal::Var(var)
                         }
                         Err(e) => return Err(e),
@@ -256,6 +260,7 @@ impl Rule {
             name: ast.name.clone(),
             func: ast.func.clone(),
             func_vars: func_vars,
+            func_types: func_types,
             ast: ast,
             body_query: query_name,
             head_pred: head_pred,

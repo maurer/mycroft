@@ -36,8 +36,8 @@ pub mod names {
     }
 
     // Name of the query's borrowed result type
-    pub fn result_borrow(query: &ir::Query) -> Ident {
-        Ident::new(format!("{}View", camelize(&query.name)))
+    pub fn result_borrow(name: &str) -> Ident {
+        Ident::new(format!("{}View", camelize(name)))
     }
 
     // Name of the phantom to deal with empty borrows
@@ -182,7 +182,7 @@ fn decls(query: &ir::Query) -> quote::Tokens {
     let result = names::result(query);
     let result2 = result.clone();
 
-    let result_borrow = names::result_borrow(query);
+    let result_borrow = names::result_borrow(&query.name);
     let result_borrow2 = result_borrow.clone();
 
     let mut vars = Vec::new();
@@ -219,7 +219,7 @@ fn decls(query: &ir::Query) -> quote::Tokens {
     }
     quote! {
         pub struct #result {
-            #(#vars: #types),*
+            #(pub #vars: #types),*
         }
         impl #result2 {
             fn from_tuple(db: &Database, tuple: Vec<usize>) -> Self {

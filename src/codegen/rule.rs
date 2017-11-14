@@ -1,14 +1,20 @@
 use ir;
 use quote;
-use syn::{Lit, IntTy};
+use syn::{Lit, IntTy, Ident};
 use std::collections::HashMap;
 use super::{predicate, query, typed};
 
 pub mod names {
     use ir;
     use syn::Ident;
+    use codegen::camelize;
+
     pub fn rule_invoke(rule: &ir::Rule) -> Ident {
         Ident::new(format!("rule_invoke_{}", rule.name))
+    }
+
+    pub fn func_result(rule: &ir::Rule) -> Ident {
+        Ident::new(format!("{}FuncResult", camelize(&rule.name)))
     }
 }
 
@@ -22,6 +28,50 @@ pub fn consts(rule: &ir::Rule, preds: &HashMap<String, ir::Predicate>) -> Vec<(S
         }
     }
     out
+}
+
+pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
+    // TODO: dedup between this function and Predicate and Query owned results
+    if rule.func.is_none() {
+        return quote!{};
+    }
+    let out_name = names::func_result(rule);
+    let out_name2 = out_name.clone();
+
+    let func_vars = rule.func_vars
+        .iter()
+        .map(|x| Ident::new(x.clone()))
+        .collect::<Vec<_>>();
+    let func_types = rule.func_types
+        .iter()
+        .map(|x| Ident::new(x.clone()))
+        .collect::<Vec<_>>();
+
+    let mut stores = Vec::new();
+
+    for (index, (type_, field_name)) in rule.func_types.iter().zip(func_vars.clone()).enumerate() {
+        let store = typed::store(type_, &quote! {self.#field_name});
+        let index_lit = Lit::Int(index as u64, IntTy::Usize);
+        stores.push(quote! {
+                out[#index_lit] = #store;
+            });
+    }
+
+    let arity = Lit::Int(func_vars.len() as u64, IntTy::Usize);
+    let arity2 = arity.clone();
+
+    quote! {
+        pub struct #out_name {
+            #(pub #func_vars: #func_types,)*
+        }
+        impl #out_name2 {
+            fn to_tuple(self, db: &mut Database) -> [usize; #arity] {
+                let mut out = [0; #arity2];
+                #(#stores)*
+                out
+            }
+        }
+    }
 }
 
 pub fn gen(rule: &ir::Rule) -> quote::Tokens {
@@ -41,12 +91,32 @@ pub fn gen(rule: &ir::Rule) -> quote::Tokens {
     let rule_invoke_name = names::rule_invoke(rule);
     let tuple_name = predicate::names::tuple(&rule.head_pred);
     let query_incr_tuple_name = query::names::incr_tuple(&rule.body_query);
+
+    let tuple_action = match rule.func {
+        Some(ref name) => {
+            let func = Ident::new(name.clone());
+            let view = query::names::result_borrow(&rule.body_query);
+            quote! {
+                for extra_vars in #func(#view::from_tuple(self, tuple.clone())) {
+                    let mut tuple = tuple.clone();
+                    tuple.extend(&extra_vars.to_tuple(self));
+                    productive |= self.#tuple_name.insert(&[#(#tuple_subs),*]).1
+                }
+            }
+        }
+        None => {
+            quote! {
+            productive |= self.#tuple_name.insert(&[#(#tuple_subs),*]).1;
+        }
+        }
+    };
+
     quote! {
         pub fn #rule_invoke_name(&mut self) -> bool {
             let mut productive = false;
             let tuples = self.#query_incr_tuple_name();
             for tuple in tuples {
-                productive |= self.#tuple_name.insert(&[#(#tuple_subs),*]).1;
+                #tuple_action
             }
             productive
         }

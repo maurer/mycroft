@@ -129,6 +129,11 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     let rule_invokes: Vec<Ident> = prog.rules.values().map(rule::names::rule_invoke).collect();
 
+    let rule_decls = prog.rules
+        .values()
+        .map(rule::result_type)
+        .collect::<Vec<_>>();
+
     // TODO add naming feature for program so that mycroft can be invoked multiple times
     // in the same module.
     quote! {
@@ -149,6 +154,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             }
             #(#pred_fact_decls)*
             #(#query_structs)*
+            #(#rule_decls)*
             impl Database {
                 pub fn new() -> Self {
                     let mut db = Self {

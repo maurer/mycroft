@@ -14,7 +14,17 @@ pub mod names {
     }
 
     pub fn func_result(rule: &ir::Rule) -> Ident {
-        Ident::new(format!("{}FuncResult", camelize(&rule.name)))
+        Ident::new(format!(
+            "{}Out",
+            camelize(rule.func.as_ref().unwrap().as_str())
+        ))
+    }
+
+    pub fn func_in(rule: &ir::Rule) -> Ident {
+        Ident::new(format!(
+            "{}In",
+            camelize(rule.func.as_ref().unwrap().as_str())
+        ))
     }
 }
 
@@ -37,6 +47,10 @@ pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
     }
     let out_name = names::func_result(rule);
     let out_name2 = out_name.clone();
+
+    let in_name = names::func_in(rule);
+
+    let query_view_name = query::names::result_borrow(&rule.body_query);
 
     let func_vars = rule.func_vars
         .iter()
@@ -71,6 +85,8 @@ pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
                 out
             }
         }
+
+        pub type #in_name<'a> = #query_view_name<'a>;
     }
 }
 

@@ -16,18 +16,15 @@ xlat_foos: Foo(out) <- Bar{a: ~THREE, b: x} + xlat
 "#
 );
 
-pub fn xlat<'a>(
-    i: mycroft_program::MycroftInternalRuleXlatFoosView<'a>,
-) -> Vec<mycroft_program::XlatFoosFuncResult> {
+use mycroft_program::*;
+
+pub fn xlat<'a>(i: XlatIn<'a>) -> Vec<XlatOut> {
     let ss = vec![format!("{}", i.x), format!("{}.0", i.x)];
-    ss.into_iter()
-        .map(|s| mycroft_program::XlatFoosFuncResult { out: s })
-        .collect()
+    ss.into_iter().map(|s| XlatOut { out: s }).collect()
 }
 
 #[test]
 fn trivial() {
-    use mycroft_program::{Database, Bar};
     let mut db = Database::new();
     db.insert_bar(Bar { a: 7, b: 4 });
     db.insert_bar(Bar { a: 3, b: 42 });

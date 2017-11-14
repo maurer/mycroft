@@ -18,7 +18,7 @@ xlat_foos: Foo(out) <- Bar{a: ~THREE, b: x} + xlat
 
 use mycroft_program::*;
 
-pub fn xlat<'a>(i: XlatIn<'a>) -> Vec<XlatOut> {
+pub fn xlat(i: &XlatIn) -> Vec<XlatOut> {
     let ss = vec![format!("{}", i.x), format!("{}.0", i.x)];
     ss.into_iter().map(|s| XlatOut { out: s }).collect()
 }

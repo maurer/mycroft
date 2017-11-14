@@ -113,7 +113,7 @@ pub fn gen(rule: &ir::Rule) -> quote::Tokens {
             let func = Ident::new(name.clone());
             let view = query::names::result_borrow(&rule.body_query);
             quote! {
-                for extra_vars in #func(#view::from_tuple(self, tuple.clone())) {
+                for extra_vars in #func(&#view::from_tuple(self, tuple.clone())) {
                     let mut tuple = tuple.clone();
                     tuple.extend(&extra_vars.to_tuple(self));
                     productive |= self.#tuple_name.insert(&[#(#tuple_subs),*]).1

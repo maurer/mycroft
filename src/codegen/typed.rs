@@ -1,4 +1,5 @@
 use syn::{Ident, Lit, IntTy};
+use codegen::snakize;
 use quote;
 // Whether the type can be cast into a usize rather than using typed storage
 pub fn is_small(type_: &str) -> bool {
@@ -45,10 +46,10 @@ pub fn store(type_: &str, expr: &quote::Tokens) -> quote::Tokens {
 
 // Provides the name of typed storage for a given type
 pub fn name(type_: &str) -> Ident {
-    Ident::new(format!("data_{}", type_.to_lowercase()))
+    Ident::new(format!("data_{}", snakize(type_)))
 }
 
 // Gives a standard name to a field to hold the precomputed key for a constant
 pub fn const_name(const_name: &str) -> Ident {
-    Ident::new(format!("k_{}", const_name.to_lowercase()))
+    Ident::new(format!("k_{}", snakize(const_name)))
 }

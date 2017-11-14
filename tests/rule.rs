@@ -19,6 +19,7 @@ JoinOut {join_out: Vu16, idx: u64}
 ?check_ordered: Ordered(x)
 ?check_named: Named {out_var: out_var}
 ?check_join: JoinOut {join_out: join_out, idx: idx}
+?gen_check: Bar(~std::u64::MAX)
 ordered_rule: Ordered(~FOUR) <- Bar(~THREE)
 named_rule: Named{out_var: out_var} <- Baz{boom: ~SEVEN, fizz: out_var}
 join_rule: JoinOut {join_out: join_out, idx: idx} <- Bar(idx) & Baz{fizz: join_out, bash: idx}

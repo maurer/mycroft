@@ -7,17 +7,35 @@ use combine::char::{letter, spaces, char, digit, string};
 use combine::primitives::Stream;
 
 parser! {
-    fn ident[I]()(I) -> String
-        where [I: Stream<Item=char>] {
-        let ident_char = letter().or(digit()).or(char('_'));
-        // TODO this is probably not the best way to express this, but it's
-        // not performance critical so I can fix it later  and just copy for now.
-        (letter(), many(ident_char).skip(spaces())).map(|(first, rest): (char, String)| {
+    fn char_seq[I, P, Q](p0: P, p: Q)(I) -> String
+        where [I: Stream<Item=char>,
+               P: Parser<Input=I, Output=char>,
+               Q: Parser<Input=I, Output=char>] {
+        (p0, many(p).skip(spaces())).map(|(first, rest): (char, String)| {
+            // TODO this is probably not the best way to express this, but it's
+            // not performance critical so I can fix it later and just copy for now.
             let mut out = String::new();
             out.push(first);
             out.push_str(rest.as_str());
             out
         })
+    }
+}
+
+parser! {
+    fn ident[I]()(I) -> String
+        where [I: Stream<Item=char>] {
+        let ident_char = letter().or(digit()).or(char('_'));
+        char_seq(letter(), ident_char)
+    }
+}
+
+parser! {
+    fn qual_ident[I]()(I) -> String
+        where [I: Stream<Item=char>] {
+        let ident_char = letter().or(digit()).or(char('_')).or(char(':'));
+        let start_char = letter().or(char(':'));
+        char_seq(start_char, ident_char)
     }
 }
 
@@ -55,7 +73,7 @@ parser! {
     // the use of a const in the module.
     fn match_const[I]()(I) -> Match
         where [I: Stream<Item=char>] {
-        (lex_char('~'), ident()).map(|k| Match::Const(k.1))
+        (lex_char('~'), qual_ident()).map(|k| Match::Const(k.1))
     }
 }
 
@@ -131,7 +149,7 @@ parser! {
         let rule_name = ident();
         let rule_head = clause();
         let rule_body = sep_by1(clause(), lex_char('&'));
-        let func = optional((lex_char('+'), ident()).map(|f| f.1));
+        let func = optional((lex_char('+'), qual_ident()).map(|f| f.1));
         (rule_name, lex_char(':'), rule_head, lex_str("<-"), rule_body, func).map(|r| Rule {
             name: r.0,
             head: r.2,

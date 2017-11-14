@@ -13,6 +13,7 @@ Foo(String)
 Bar{a: u32, b: u64}
 ?check_foo: Foo(out)
 xlat_foos: Foo(out) <- Bar{a: ~THREE, b: x} + xlat
+gen_check: Foo(out) <- Bar{a: ~THREE, b: x} + ::xlat_b
 "#
 );
 
@@ -21,6 +22,11 @@ use mycroft_program::*;
 pub fn xlat(i: &XlatIn) -> Vec<XlatOut> {
     let ss = vec![format!("{}", i.x), format!("{}.0", i.x)];
     ss.into_iter().map(|s| XlatOut { out: s }).collect()
+}
+
+pub fn xlat_b(i: &XlatBIn) -> Vec<XlatBOut> {
+    let ss = vec![format!("{}", i.x), format!("{}.0", i.x)];
+    ss.into_iter().map(|s| XlatBOut { out: s }).collect()
 }
 
 #[test]

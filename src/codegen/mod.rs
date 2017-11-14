@@ -16,7 +16,7 @@ fn camelize(s: &str) -> String {
     let mut new_word = true;
     for c in s.chars() {
         match c {
-            '_' => new_word = true,
+            '_' | ':' => new_word = true,
             c if new_word => {
                 new_word = false;
                 out_chars.extend(c.to_uppercase());
@@ -24,7 +24,27 @@ fn camelize(s: &str) -> String {
             c => out_chars.push(c),
         }
     }
-    out_chars.iter().collect()
+    out_chars.into_iter().collect()
+}
+
+fn snakize(s: &str) -> String {
+    let mut case = true;
+    let mut out_chars = Vec::new();
+    for c in s.chars() {
+        match c {
+            '_' | ':' => case = false,
+            c if c.is_uppercase() && !case => {
+                out_chars.push('_');
+                out_chars.extend(c.to_lowercase());
+                case = true;
+            }
+            c => {
+                case = c.is_uppercase();
+                out_chars.extend(c.to_lowercase());
+            }
+        }
+    }
+    out_chars.into_iter().collect()
 }
 
 /// Transforms a complete Mycroft program in IR form into code to include in a user program

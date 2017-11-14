@@ -82,7 +82,7 @@ pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
         impl #fact_name2 {
             fn from_tuple(db: &Database, tuple: &[usize]) -> Self {
                 Self {
-                    #(#field_names2: #type_loads),*
+                    #(#field_names2: (#type_loads).clone()),*
                 }
             }
             fn to_tuple(self, db: &mut Database) -> [usize; #arity] {

@@ -420,7 +420,8 @@ fn gen_incr(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
                 .collect()
             }
             pub fn #query_incr_func(&mut self) -> Vec<#query_result> {
-                self.#query_incr_tuple_name2().into_iter().map(|tup| #query_result2::from_tuple(self, tup)).collect()
+                self.#query_incr_tuple_name2().into_iter()
+                    .map(|tup| #query_result2::from_tuple(self, tup)).collect()
             }
         },
         quote! {

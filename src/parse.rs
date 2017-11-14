@@ -136,7 +136,7 @@ parser! {
             name: r.0,
             head: r.2,
             body: r.4,
-            func: r.5 
+            func: r.5
         })
     }
 }

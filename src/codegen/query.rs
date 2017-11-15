@@ -336,11 +336,6 @@ fn gen_subjoin_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
 
 // Builds the incremental query
 fn gen_incr(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
-    // TODO: add reordering to subjoins so that they each use their own restrict and put their
-    // mailbox as the first index to the joiner. This will likely involve work in the IR as
-    // well to generate additional permutation/restriction combos - that logic doesn't belong
-    // in the code generator.
-
     let query_result = names::result(query);
     let query_result2 = query_result.clone();
 
@@ -451,7 +446,8 @@ pub fn consts(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Vec<
     for (pred_id, row) in query.matches.iter().enumerate() {
         for (field_id, mk) in row.iter().enumerate() {
             if let Some(ir::MatchVal::Const(ref k)) = *mk {
-                let type_ = &preds[&query.predicates[pred_id]].types[field_id];
+                let xlat_field_id = query.gao[pred_id][field_id];
+                let type_ = &preds[&query.predicates[pred_id]].types[xlat_field_id];
                 out.push((k.clone(), type_.to_string()))
             }
         }

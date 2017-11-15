@@ -47,7 +47,7 @@ impl Restrict {
         match *self {
             Restrict::Const(v) => v == val,
             Restrict::Unify(var) => {
-                if var < candidate.len() {
+                if order[var] < candidate.len() {
                     candidate[order[var]] == val
                 } else if order[var] == candidate.len() {
                     candidate.push(val);

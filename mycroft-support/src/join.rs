@@ -43,7 +43,7 @@ pub enum Restrict {
 impl Restrict {
     // Checks whether a restriction is met, updating the candidate if it has a new variable
     // definition
-    fn check(&self, candidate: &mut Vec<usize>, val: usize, order: &Vec<usize>) -> bool {
+    fn check(&self, candidate: &mut Vec<usize>, val: usize, order: &[usize]) -> bool {
         match *self {
             Restrict::Const(v) => v == val,
             Restrict::Unify(var) => {
@@ -60,12 +60,13 @@ impl Restrict {
     }
     // Provides the minimum legal value for the field, assuming the candidate we have partially
     // locked in.
-    fn min(&self, candidate: &Vec<usize>) -> usize {
+    fn min(&self, candidate: &Vec<usize>, order: &[usize]) -> usize {
         match *self {
             Restrict::Const(v) => v,
             Restrict::Unify(var) => {
-                if var < candidate.len() {
-                    candidate[var]
+                let var_xlat = order[var];
+                if var_xlat < candidate.len() {
+                    candidate[var_xlat]
                 } else {
                     0
                 }
@@ -80,8 +81,6 @@ pub struct Join<'a> {
     order: Vec<usize>,
     // Based on the reorder of predicates, how to read the restricts as candidate idx
     var_old_to_new: Vec<usize>,
-    // Based on the reorder of predicates, how to read candidates as outputs
-    var_new_to_old: Vec<usize>,
     indices: Vec<&'a mut SkipIterator>,
     restricts: &'a Vec<Vec<Option<Restrict>>>,
     // Currently selected variable assignment
@@ -90,12 +89,12 @@ pub struct Join<'a> {
     candidate_len: Vec<usize>,
 }
 
-fn min_possible(candidate: &Vec<usize>, restricts: &Vec<Option<Restrict>>) -> Vec<usize> {
+fn min_possible(candidate: &Vec<usize>, restricts: &Vec<Option<Restrict>>, order: &[usize]) -> Vec<usize> {
     let mut out = Vec::new();
     for mr in restricts.iter() {
         match *mr {
             None => out.push(0),
-            Some(ref r) => out.push(r.min(candidate)),
+            Some(ref r) => out.push(r.min(candidate, order)),
         }
     }
     out
@@ -113,7 +112,7 @@ fn reorder_indices(indices: &Vec<&mut SkipIterator>) -> Vec<usize> {
 fn reorder_vars(
     order: &[usize],
     restricts: &[Vec<Option<Restrict>>],
-) -> (Vec<usize>, Vec<usize>) {
+) -> Vec<usize> {
     let max_var_len: usize = restricts
         .iter()
         .flat_map(|pred| pred.iter().flat_map(|mr| mr.iter()))
@@ -139,7 +138,7 @@ fn reorder_vars(
             }
         }
     }
-    (old_to_new, new_to_old)
+    old_to_new
 }
 
 impl<'a> Join<'a> {
@@ -158,11 +157,10 @@ impl<'a> Join<'a> {
         restricts: &'a Vec<Vec<Option<Restrict>>>,
     ) -> Self {
         let order = reorder_indices(&indices);
-        let (var_old_to_new, var_new_to_old) = reorder_vars(&order, restricts);
+        let var_old_to_new = reorder_vars(&order, restricts);
         let mut join = Join {
             order: order,
             var_old_to_new: var_old_to_new,
-            var_new_to_old: var_new_to_old,
             indices: indices,
             restricts: restricts,
             candidate: Vec::new(),
@@ -183,7 +181,7 @@ impl<'a> Join<'a> {
     // and checking restrictions
     fn right(&mut self) {
         let n = self.order[self.candidate_len.len()];
-        self.indices[n].skip(min_possible(&self.candidate, &self.restricts[n]));
+        self.indices[n].skip(min_possible(&self.candidate, &self.restricts[n], &self.var_old_to_new));
     }
 }
 impl<'a> Iterator for Join<'a> {
@@ -220,7 +218,7 @@ impl<'a> Iterator for Join<'a> {
                     if self.candidate_len.len() == self.indices.len() {
                         // We have a complete candidate
                         let mut out = Vec::new();
-                        for idx in &self.var_new_to_old {
+                        for idx in &self.var_old_to_new {
                             out.push(self.candidate[*idx])
                         }
                         self.candidate.truncate(self.candidate_len.pop().unwrap());

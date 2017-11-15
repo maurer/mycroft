@@ -2,9 +2,9 @@
 #![cfg_attr(feature = "cargo-clippy", allow(unneeded_field_pattern))]
 //! Provides parsing functions for the Mycroft language.
 use ast::*;
-use combine::{Parser, many, between, sep_by1, try, optional};
+use combine::{parser, Parser, many, between, sep_by1, try, optional, any, not_followed_by};
 use combine::char::{letter, spaces, char, digit, string};
-use combine::primitives::Stream;
+use combine::primitives::{Stream, Consumed};
 
 parser! {
     fn char_seq[I, P, Q](p0: P, p: Q)(I) -> String
@@ -68,12 +68,47 @@ parser! {
 }
 
 parser! {
+    fn paren[I]()(I) -> char
+        where [I: Stream<Item=char>] {
+        char('(').or(char(')'))
+    }
+}
+
+parser! {
+    fn non_paren[I]()(I) -> char
+        where [I: Stream<Item=char>] {
+        (not_followed_by(paren()), any()).map(|x| x.1)
+    }
+}
+
+parser! {
+    fn nested_paren[I](n: usize)(I) -> String
+        where [I: Stream<Item=char>] {
+        (many(non_paren()), paren()).then(|data: (String, char)| {
+            match data.1 {
+                '(' => nested_paren(*n + 1).map(move |sub| data.0.clone() + "(" + &sub).boxed(),
+                ')' if *n == 1 => parser(move |p| Ok((data.0.clone(), Consumed::Empty(p)))).boxed(),
+                ')' => nested_paren(*n - 1).map(move |sub| data.0.clone() + ")" + &sub).boxed(),
+                _ => panic!("Paren-parser returned non-paren character")
+            }
+        })
+    }
+}
+
+parser! {
+    fn paren_match[I]()(I) -> String
+        where [I: Stream<Item=char>] {
+        (lex_char('('), nested_paren(1)).map(|x| x.1)
+    }
+}
+
+parser! {
     // This is less expressive than I'd like, but short of an actual rust parser, it's hard to say
     // "followed by a rust expression", so for now I'm just going to accept an ident, and encourage
     // the use of a const in the module.
     fn match_const[I]()(I) -> Match
         where [I: Stream<Item=char>] {
-        (lex_char('~'), qual_ident()).map(|k| Match::Const(k.1))
+        (lex_char('~'), qual_ident().or(paren_match())).map(|k| Match::Const(k.1))
     }
 }
 

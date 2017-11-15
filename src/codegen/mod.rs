@@ -32,7 +32,7 @@ fn snakize(s: &str) -> String {
     let mut out_chars = Vec::new();
     for c in s.chars() {
         match c {
-            '_' | ':' => case = false,
+            c if !c.is_alphanumeric() => case = false,
             c if c.is_uppercase() && !case => {
                 out_chars.push('_');
                 out_chars.extend(c.to_lowercase());

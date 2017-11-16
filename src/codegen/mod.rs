@@ -4,7 +4,7 @@
 use ir;
 use quote;
 use syn::{Ident, Lit, IntTy};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 mod typed;
 mod query;
@@ -49,7 +49,7 @@ fn snakize(s: &str) -> String {
 
 /// Transforms a complete Mycroft program in IR form into code to include in a user program
 pub fn program(prog: &ir::Program) -> quote::Tokens {
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
     // Declarations of predicate fact structs
     let pred_fact_decls = prog.predicates
         .values()
@@ -84,7 +84,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     let pred_names2 = pred_names.clone();
 
     // Collecting types to figure out what typed storage is needed
-    let mut type_set = HashSet::new();
+    let mut type_set = BTreeSet::new();
     for pred in prog.predicates.values() {
         for type_ in &pred.types {
             type_set.insert(type_.clone());
@@ -119,7 +119,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         .collect::<Vec<_>>();
 
     // Map from constant name to constant type
-    let mut consts: HashMap<String, String> = HashMap::new();
+    let mut consts: BTreeMap<String, String> = BTreeMap::new();
     for (k, type_) in prog.queries.values().flat_map(|query| {
         query::consts(query, &prog.predicates)
     })

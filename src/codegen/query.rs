@@ -2,7 +2,7 @@ use ir;
 use syn::{Ident, Lit, IntTy};
 use quote;
 use super::{typed, predicate};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub mod names {
     use ir;
@@ -441,7 +441,7 @@ pub fn gen(query: &ir::Query) -> QueryOut {
     }
 }
 
-pub fn consts(query: &ir::Query, preds: &HashMap<String, ir::Predicate>) -> Vec<(String, String)> {
+pub fn consts(query: &ir::Query, preds: &BTreeMap<String, ir::Predicate>) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for (pred_id, row) in query.matches.iter().enumerate() {
         for (field_id, mk) in row.iter().enumerate() {

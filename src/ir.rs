@@ -2,7 +2,7 @@
 //! Transformation into the IR will also check the AST for validity, so errors may be returned in
 //! some cases.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use ast;
 
@@ -127,7 +127,7 @@ impl Predicate {
 }
 
 /// Rperesentation of a specific field in a query
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct QueryField {
     /// Which predicate in the query this projection is on
     pub pred_id: usize,
@@ -150,7 +150,7 @@ pub struct Query {
     /// Indexed by query, then field, what restrictions are on that coordinate
     pub matches: Vec<Vec<Option<MatchVal>>>,
     /// Map between variables and their types
-    pub types: HashMap<String, String>,
+    pub types: BTreeMap<String, String>,
     /// For each predicate, how it should be projected in the ordering
     pub gao: Vec<Vec<usize>>,
 }
@@ -200,8 +200,8 @@ fn find_var(hay: &[String], needle: &str) -> Result<usize> {
 impl Rule {
     fn from_ast(
         ast: ast::Rule,
-        preds: &HashMap<String, Predicate>,
-        queries: &mut HashMap<String, Query>,
+        preds: &BTreeMap<String, Predicate>,
+        queries: &mut BTreeMap<String, Query>,
     ) -> Result<Self> {
         // Generate a fake ast to make a query out of
         let query_name = format!("mycroft_internal_rule_{}", ast.name);
@@ -288,7 +288,7 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
             if pred.names.is_none() {
                 return Err(ErrorKind::MatchStyle(Box::new(pred.clone())).into());
             }
-            let mut seen_fields: HashSet<String> = HashSet::new();
+            let mut seen_fields: BTreeSet<String> = BTreeSet::new();
             let mut out = Vec::new();
             for &ast::NamedField { ref name, ref val } in nm.iter() {
                 if seen_fields.contains(name) {
@@ -341,14 +341,14 @@ fn permute(gao: &[Vec<usize>], qf: &QueryField) -> QueryField {
 }
 
 impl Query {
-    fn from_ast(ast: ast::Query, preds: &HashMap<String, Predicate>) -> Result<Self> {
+    fn from_ast(ast: ast::Query, preds: &BTreeMap<String, Predicate>) -> Result<Self> {
         let name = ast.name.clone();
         let mut predicates = Vec::new();
-        let mut pre_unify = HashMap::new();
-        let mut types: HashMap<String, String> = HashMap::new();
+        let mut pre_unify = BTreeMap::new();
+        let mut types: BTreeMap<String, String> = BTreeMap::new();
         let mut pre_eq = Vec::new();
         let mut vars = Vec::new();
-        let mut var_map = HashMap::new();
+        let mut var_map = BTreeMap::new();
         for (idx, clause) in ast.clauses.clone().iter().enumerate() {
             if !preds.contains_key(&clause.pred_name) {
                 return Err(
@@ -417,14 +417,14 @@ impl Query {
         }
 
         // Translate pre_unify and pre_eq via the gao
-        let mut unify = HashMap::new();
+        let mut unify = BTreeMap::new();
         for (var, qfs) in &pre_unify {
             let var_id = var_map[var];
             for qf in qfs {
                 unify.insert(permute(&gao, qf), var_id);
             }
         }
-        let mut eq = HashMap::new();
+        let mut eq = BTreeMap::new();
         for &(ref qf, ref k) in &pre_eq {
             eq.insert(permute(&gao, qf), k.clone());
         }
@@ -467,18 +467,18 @@ impl Query {
 /// This is the structure to be handed off to the code generator.
 pub struct Program {
     /// Map from predicate name to IR predicate
-    pub predicates: HashMap<String, Predicate>,
+    pub predicates: BTreeMap<String, Predicate>,
     /// Map from query name to IR query
-    pub queries: HashMap<String, Query>,
+    pub queries: BTreeMap<String, Query>,
     /// Map from rule name to IR rule
-    pub rules: HashMap<String, Rule>,
+    pub rules: BTreeMap<String, Rule>,
 }
 
 impl Program {
     /// Generate a program IR from an AST
     pub fn from_ast(ast: ast::Program) -> Result<Self> {
         //TODO: this is repetative, dedup it
-        let mut predicates: HashMap<String, Predicate> = HashMap::new();
+        let mut predicates: BTreeMap<String, Predicate> = BTreeMap::new();
         for ast_pred in ast.predicates {
             let ir_pred = Predicate::from_ast(ast_pred);
             if predicates.contains_key(&ir_pred.name) {
@@ -491,7 +491,7 @@ impl Program {
             predicates.insert(ir_pred.name.clone(), ir_pred);
         }
 
-        let mut queries: HashMap<String, Query> = HashMap::new();
+        let mut queries: BTreeMap<String, Query> = BTreeMap::new();
         for ast_query in ast.queries {
             let ir_query = Query::from_ast(ast_query, &predicates)?;
             if queries.contains_key(&ir_query.name) {
@@ -504,7 +504,7 @@ impl Program {
             queries.insert(ir_query.name.clone(), ir_query);
         }
 
-        let mut rules: HashMap<String, Rule> = HashMap::new();
+        let mut rules: BTreeMap<String, Rule> = BTreeMap::new();
         for ast_rule in ast.rules {
             let ir_rule = Rule::from_ast(ast_rule, &predicates, &mut queries)?;
             if rules.contains_key(&ir_rule.name) {

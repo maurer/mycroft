@@ -1,7 +1,7 @@
 use ir;
 use quote;
 use syn::{Lit, IntTy, Ident};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use super::{predicate, query, typed};
 
 pub mod names {
@@ -28,7 +28,7 @@ pub mod names {
     }
 }
 
-pub fn consts(rule: &ir::Rule, preds: &HashMap<String, ir::Predicate>) -> Vec<(String, String)> {
+pub fn consts(rule: &ir::Rule, preds: &BTreeMap<String, ir::Predicate>) -> Vec<(String, String)> {
     // Our query was registered seperately, so we don't need to to examine it for consts
     let pred = &preds[&rule.head_pred];
     let mut out = Vec::new();

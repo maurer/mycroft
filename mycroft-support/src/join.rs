@@ -189,32 +189,49 @@ impl<'a> Iterator for Join<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // Join invariants:
         // 1.) candidate_len.len() indicates the "current" index
-        // 2.) All indices less than the current index are coherent, and their candidate values are in candidate
-        // 3.) The current index is at least past the minimum possible advancement level (this needs to be set up in new())
+        // 2.) All indices less than the current index are coherent, and their candidate values
+        //     are in candidate
+        // 3.) The current index is at least past the minimum possible advancement level
+        //     (this needs to be set up in new())
         'states: loop {
             let n = self.order[self.candidate_len.len()];
             self.candidate_len.push(self.candidate.len());
             match self.indices[n].next() {
                 Some(tup) => {
-                    for (f, v) in tup.into_iter().enumerate() {
-                        let mut left_out = false;
-                        match self.restricts[n][f] {
-                            Some(r) => {
-                                if !r.check(&mut self.candidate, v, &self.var_old_to_new) {
-                                    if n == self.order[0] {
-                                        self.candidate.truncate(self.candidate_len.pop().unwrap());
-                                        return None;
-                                    }
-                                    left_out = true;
+                    for (f, v) in tup.iter().enumerate() {
+                        if let Some(r) = self.restricts[n][f] {
+                            if !r.check(&mut self.candidate, *v, &self.var_old_to_new) {
+                                if n == self.order[0] {
+                                    self.candidate.truncate(self.candidate_len.pop().unwrap());
+                                    return None;
                                 }
+                                if f == 0 {
+                                    self.left();
+                                } else {
+                                    let mut min = min_possible(
+                                        &self.candidate,
+                                        &self.restricts[n],
+                                        &self.var_old_to_new,
+                                    );
+                                    if min[f] <= tup[f] {
+                                        // We've passed the min, step the previous if possible
+                                        if f != 0 {
+                                            min[f - 1] += 1;
+                                        } else {
+                                            // If the first element has gone valid -> invalid,
+                                            // it's time to go to the previous clause
+                                            self.left();
+                                            continue 'states;
+                                        }
+                                    }
+                                    self.indices[n].skip(min);
+                                    self.candidate.truncate(self.candidate_len.pop().unwrap());
+                                }
+                                continue 'states;
                             }
-                            None => (),
-                        }
-                        if left_out {
-                            self.left();
-                            continue 'states;
                         }
                     }
+
                     if self.candidate_len.len() == self.indices.len() {
                         // We have a complete candidate
                         let mut out = Vec::new();
@@ -311,9 +328,41 @@ mod test {
         let order_flip = &[1, 0];
         let restrict_flip = vec![
             vec![Some(Unify(0)), Some(Unify(1))],
-            vec![Some(Unify(1)), Some(Unify(0))]
+            vec![Some(Unify(1)), Some(Unify(0))],
         ];
-        assert_eq!(&reorder_vars(order, &restrict_flip).0, &[0, 1]);
-        assert_eq!(&reorder_vars(order_flip, &restrict_flip).0, &[1, 0]);
+        assert_eq!(&reorder_vars(order, &restrict_flip), &[0, 1]);
+        assert_eq!(&reorder_vars(order_flip, &restrict_flip), &[1, 0]);
+    }
+
+    // Derived from actual data causing a mistake in reordering, that's why the inputs are a bit
+    // arcane
+    #[test]
+    fn reorder_real() {
+        use self::Restrict::*;
+        let mut p = TrivialIterator::new(vec![vec![16, 16], vec![18, 18], vec![26, 26]]);
+        let mut q = TrivialIterator::new(vec![vec![16, 88], vec![18, 89]]);
+        let restricts = vec![
+            vec![Some(Unify(0)), Some(Unify(1))],
+            vec![Some(Unify(1)), Some(Unify(2))],
+        ];
+        let its: Vec<&mut SkipIterator> = vec![&mut p, &mut q];
+        let join = Join::new(its, &restricts);
+        assert_eq!(join.collect::<Vec<_>>().len(), 2)
+    }
+
+    // Evidently the first one overminimized - it still found a bug, but there's more!
+    #[test]
+    fn reorder_real2() {
+        use self::Restrict::*;
+        let mut p = TrivialIterator::new(vec![vec![16, 16], vec![16, 88]]);
+
+        let mut q = TrivialIterator::new(vec![vec![88, 15]]);
+        let restricts = vec![
+            vec![Some(Unify(0)), Some(Unify(1))],
+            vec![Some(Unify(1)), Some(Unify(2))],
+        ];
+        let its: Vec<&mut SkipIterator> = vec![&mut p, &mut q];
+        let join = Join::new(its, &restricts);
+        assert_eq!(join.collect::<Vec<_>>().len(), 1)
     }
 }

@@ -1,6 +1,6 @@
 use ir;
 use quote;
-use syn::{Ident, IntTy, Lit};
+use syn::{Ident, IntTy, Lit, StrStyle};
 use std::collections::BTreeMap;
 use super::{predicate, query, typed};
 
@@ -116,22 +116,28 @@ pub fn gen(rule: &ir::Rule) -> quote::Tokens {
                 for extra_vars in #func(&#view::from_tuple(self, tuple.clone())) {
                     let mut tuple = tuple.clone();
                     tuple.extend(&extra_vars.to_tuple(self));
-                    productive |= self.#tuple_name.insert(&[#(#tuple_subs),*]).1
+                    productive |= self.#tuple_name.insert(&[#(#tuple_subs),*], p.clone()).1
                 }
             }
         }
         None => {
             quote! {
-                productive |= self.#tuple_name.insert(&[#(#tuple_subs),*]).1;
+                productive |= self.#tuple_name.insert(&[#(#tuple_subs),*], p).1;
             }
         }
     };
+
+    let rule_name_str = Lit::Str(rule.name.to_string(), StrStyle::Cooked);
 
     quote! {
         pub fn #rule_invoke_name(&mut self) -> bool {
             let mut productive = false;
             let tuples = self.#query_incr_tuple_name();
-            for tuple in tuples {
+            for (fids, tuple) in tuples {
+                let p = Provenance::Rule {
+                    rule_name: #rule_name_str,
+                    premises: fids
+                };
                 #tuple_action
             }
             productive

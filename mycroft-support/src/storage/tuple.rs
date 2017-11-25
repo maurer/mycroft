@@ -1,9 +1,9 @@
 //! `tuples` contains structures related to an in-memory tuple-store for `usize` values.
 //! It is intended to be used in conjunction with `storage::Data` to provid arbitrary-typed tuple
 //! functionality.
-use std::collections::{HashMap, BTreeSet};
-use std::collections::btree_set;
-use index::hash::{HashIndex, CheckIndex};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::btree_map;
+use index::hash::{CheckIndex, HashIndex};
 use join::SkipIterator;
 
 type Tuple = Vec<usize>;
@@ -19,26 +19,26 @@ fn permute(perm: &[usize], tup: &[usize]) -> Tuple {
 /// A projection is an ordered view of a tuple store, under a specific permutation.
 pub struct Projection {
     perm: Vec<usize>,
-    inner: BTreeSet<Tuple>,
+    inner: BTreeMap<Tuple, usize>,
 }
 
 impl Projection {
     fn new(perm: &[usize]) -> Self {
         Self {
             perm: perm.iter().cloned().collect(),
-            inner: BTreeSet::new(),
+            inner: BTreeMap::new(),
         }
     }
     fn take(&mut self) -> Self {
-        let mut out_inner = BTreeSet::new();
+        let mut out_inner = BTreeMap::new();
         ::std::mem::swap(&mut self.inner, &mut out_inner);
         Self {
             perm: self.perm.clone(),
             inner: out_inner,
         }
     }
-    fn insert(&mut self, tup: &[usize]) {
-        self.inner.insert(permute(&self.perm, &tup));
+    fn insert(&mut self, tup: &[usize], fid: usize) {
+        self.inner.insert(permute(&self.perm, &tup), fid);
     }
     fn arity(&self) -> usize {
         self.perm.len()
@@ -58,15 +58,15 @@ impl Projection {
 /// Iterator over a projection implementing the `SkipIterator` interface
 pub struct ProjectionIter<'a> {
     proj: &'a Projection,
-    iter: btree_set::Range<'a, Tuple>,
+    iter: btree_map::Range<'a, Tuple, usize>,
 }
 
 impl<'a> SkipIterator for ProjectionIter<'a> {
     fn skip(&mut self, tup: Tuple) {
         self.iter = self.proj.inner.range(tup..);
     }
-    fn next(&mut self) -> Option<Tuple> {
-        self.iter.next().map(|x| x.clone())
+    fn next(&mut self) -> Option<(usize, Tuple)> {
+        self.iter.next().map(|(v, k)| (*k, v.clone()))
     }
     fn arity(&self) -> usize {
         self.proj.arity()
@@ -74,6 +74,24 @@ impl<'a> SkipIterator for ProjectionIter<'a> {
     fn len(&self) -> usize {
         self.proj.len()
     }
+}
+
+/// How we know a fact to be true
+#[derive(Ord, Eq, Debug, PartialOrd, PartialEq, Clone)]
+pub enum Provenance {
+    /// Part of the IDB, e.g. user defined
+    Base,
+    /// The named rule derived the fact using the provided premises
+    Rule {
+        // We could use a rule_id instead of a rule_name, defined by the sorted order of rule
+        // names. This would be slightly faster if we need to do an operation on the whole
+        // provenance tree frequently, but this will be easier to debug for now.
+        // TODO: switch to rule IDs
+        /// Name of rule used
+        rule_name: &'static str,
+        /// Which facts were used - which tuplestore to look up from depends on the rule
+        premises: Vec<usize>,
+    },
 }
 
 /// In-memory Tuple store.
@@ -86,6 +104,7 @@ pub struct Tuples {
     index: HashIndex<[usize]>,
     projections: HashMap<Vec<usize>, Projection>,
     mailboxes: Vec<Projection>,
+    provenance: Vec<BTreeSet<Provenance>>,
 }
 
 struct Rows<'a> {
@@ -105,17 +124,29 @@ impl<'a> CheckIndex<[usize]> for Rows<'a> {
 }
 
 impl Tuples {
-    // Basic integrity check - doesn't do much at the moment, just make sure the tuple store itself
-    // is non-trivial and has equal-length columns.
+    // Basic integrity check
     fn integrity(&self) -> bool {
+        // We have non-zero arity
         if self.arity() == 0 {
             return false;
         }
+        // All our columns are the same length.
         for col in self.inner.iter() {
             if col.len() != self.inner[0].len() {
                 return false;
             }
         }
+        // We have provenance for every tuple
+        // This makes integrity() slow, so it must only be used inside debug_assert!
+        if self.inner[0].len() != self.provenance.len() {
+            return false;
+        }
+        for p in self.provenance.iter() {
+            if p.is_empty() {
+                return false;
+            }
+        }
+
         return true;
     }
     /// Acquires a **previously registered** projection for the permutation provided. If you did not
@@ -147,12 +178,10 @@ impl Tuples {
         }
         let mut projection = Projection::new(fields);
         for i in 0..self.len() {
-            projection.insert(&self.get_unchecked(i))
+            projection.insert(&self.get_unchecked(i), i)
         }
-        self.projections.insert(
-            fields.iter().cloned().collect(),
-            projection,
-        );
+        self.projections
+            .insert(fields.iter().cloned().collect(), projection);
     }
     /// Requests that a mailbox be created for a given permutation, and returns the mailbox ID.
     /// A mailbox is basically an index for which only values added since you last checked it are
@@ -164,7 +193,7 @@ impl Tuples {
         // TODO: dedup between this and register_projection
         let mut projection = Projection::new(fields);
         for i in 0..self.len() {
-            projection.insert(&self.get_unchecked(i))
+            projection.insert(&self.get_unchecked(i), i)
         }
         self.mailboxes.push(projection);
         self.mailboxes.len() - 1
@@ -181,6 +210,7 @@ impl Tuples {
             index: HashIndex::new(),
             projections: HashMap::new(),
             mailboxes: Vec::new(),
+            provenance: Vec::new(),
         }
     }
     /// Returns the arity of the tuples stored
@@ -209,22 +239,28 @@ impl Tuples {
     /// Adds a new element to the tuple store.
     /// The arity of the provided value must equal the arity of the tuple store.
     /// The returned value is a pair of the key, and whether the value was new (true for new).
-    pub fn insert(&mut self, val: &[usize]) -> (usize, bool) {
+    pub fn insert(&mut self, val: &[usize], p: Provenance) -> (usize, bool) {
         match self.find(&val) {
-            Some(id) => (id, false),
+            Some(id) => {
+                self.provenance[id].insert(p);
+                (id, false)
+            }
             None => {
                 assert_eq!(val.len(), self.arity());
                 debug_assert!(self.integrity());
                 let key = self.len();
                 self.index.insert(key, val);
+                let mut ps = BTreeSet::new();
+                ps.insert(p);
+                self.provenance.push(ps);
                 for (col, new_val) in self.inner.iter_mut().zip(val.into_iter()) {
                     col.push(*new_val)
                 }
                 for proj in self.projections.values_mut() {
-                    proj.insert(val)
+                    proj.insert(val, key)
                 }
                 for mailbox in self.mailboxes.iter_mut() {
-                    mailbox.insert(val)
+                    mailbox.insert(val, key)
                 }
                 (key, true)
             }

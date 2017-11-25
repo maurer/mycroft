@@ -159,7 +159,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     quote! {
        mod mycroft_program {
             #![allow(unused_imports,dead_code,unused_variables,unused_mut)]
-            use mycroft_support::storage::{Tuples, Data};
+            use mycroft_support::storage::{Tuples, Data, Provenance};
             use mycroft_support::join::{Join, SkipIterator, Field, Restrict};
             #[derive(Default)]
             struct QueryStorage {

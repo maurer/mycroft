@@ -9,8 +9,8 @@ pub type Tuple = Vec<usize>;
 /// * It can be moved to the first value above or equal to a tuple, meaning the iterator must be
 ///   rewindable.
 pub trait SkipIterator {
-    /// Provides the next tuple in the iterator
-    fn next(&mut self) -> Option<Tuple>;
+    /// Provides the next tuple in the iterator, the fact ID it was derived from
+    fn next(&mut self) -> Option<(usize, Tuple)>;
     /// Sets the iterator position to return the minimum value which is greater than or equal to
     /// the provided min.
     fn skip(&mut self, min: Tuple);
@@ -46,16 +46,14 @@ impl Restrict {
     fn check(&self, candidate: &mut Vec<usize>, val: usize, order: &[usize]) -> bool {
         match *self {
             Restrict::Const(v) => v == val,
-            Restrict::Unify(var) => {
-                if order[var] < candidate.len() {
-                    candidate[order[var]] == val
-                } else if order[var] == candidate.len() {
-                    candidate.push(val);
-                    true
-                } else {
-                    panic!("Out of order variable numbering")
-                }
-            }
+            Restrict::Unify(var) => if order[var] < candidate.len() {
+                candidate[order[var]] == val
+            } else if order[var] == candidate.len() {
+                candidate.push(val);
+                true
+            } else {
+                panic!("Out of order variable numbering")
+            },
         }
     }
     // Provides the minimum legal value for the field, assuming the candidate we have partially
@@ -87,9 +85,15 @@ pub struct Join<'a> {
     candidate: Vec<usize>,
     // Stack of previous variable assignment lengths so we can rewind choices
     candidate_len: Vec<usize>,
+    // Stack of fact ids in use
+    fids: Vec<usize>,
 }
 
-fn min_possible(candidate: &Vec<usize>, restricts: &Vec<Option<Restrict>>, order: &[usize]) -> Vec<usize> {
+fn min_possible(
+    candidate: &Vec<usize>,
+    restricts: &Vec<Option<Restrict>>,
+    order: &[usize],
+) -> Vec<usize> {
     let mut out = Vec::new();
     for mr in restricts.iter() {
         match *mr {
@@ -109,10 +113,7 @@ fn reorder_indices(indices: &Vec<&mut SkipIterator>) -> Vec<usize> {
 }
 
 // Based on the ordering of iterators, renumber the variables
-fn reorder_vars(
-    order: &[usize],
-    restricts: &[Vec<Option<Restrict>>],
-) -> Vec<usize> {
+fn reorder_vars(order: &[usize], restricts: &[Vec<Option<Restrict>>]) -> Vec<usize> {
     let max_var_len: usize = restricts
         .iter()
         .flat_map(|pred| pred.iter().flat_map(|mr| mr.iter()))
@@ -165,6 +166,7 @@ impl<'a> Join<'a> {
             restricts: restricts,
             candidate: Vec::new(),
             candidate_len: Vec::new(),
+            fids: Vec::new(),
         };
         // We need to .right() once before starting to initialize the leftmost iterator properly
         join.right();
@@ -173,6 +175,8 @@ impl<'a> Join<'a> {
 
     // Moves one iterator left, e.g. because we have no more possibilities on this one
     fn left(&mut self) {
+        self.fids.pop();
+        self.fids.pop();
         self.candidate.truncate(self.candidate_len.pop().unwrap());
         self.candidate.truncate(self.candidate_len.pop().unwrap());
     }
@@ -181,11 +185,15 @@ impl<'a> Join<'a> {
     // and checking restrictions
     fn right(&mut self) {
         let n = self.order[self.candidate_len.len()];
-        self.indices[n].skip(min_possible(&self.candidate, &self.restricts[n], &self.var_old_to_new));
+        self.indices[n].skip(min_possible(
+            &self.candidate,
+            &self.restricts[n],
+            &self.var_old_to_new,
+        ));
     }
 }
 impl<'a> Iterator for Join<'a> {
-    type Item = Tuple;
+    type Item = (Vec<usize>, Tuple);
     fn next(&mut self) -> Option<Self::Item> {
         // Join invariants:
         // 1.) candidate_len.len() indicates the "current" index
@@ -197,12 +205,14 @@ impl<'a> Iterator for Join<'a> {
             let n = self.order[self.candidate_len.len()];
             self.candidate_len.push(self.candidate.len());
             match self.indices[n].next() {
-                Some(tup) => {
+                Some((fid, tup)) => {
+                    self.fids.push(fid);
                     for (f, v) in tup.iter().enumerate() {
                         if let Some(r) = self.restricts[n][f] {
                             if !r.check(&mut self.candidate, *v, &self.var_old_to_new) {
                                 if n == self.order[0] {
                                     self.candidate.truncate(self.candidate_len.pop().unwrap());
+                                    self.fids.pop();
                                     return None;
                                 }
                                 if f == 0 {
@@ -226,6 +236,7 @@ impl<'a> Iterator for Join<'a> {
                                     }
                                     self.indices[n].skip(min);
                                     self.candidate.truncate(self.candidate_len.pop().unwrap());
+                                    self.fids.pop();
                                 }
                                 continue 'states;
                             }
@@ -238,8 +249,10 @@ impl<'a> Iterator for Join<'a> {
                         for idx in &self.var_old_to_new {
                             out.push(self.candidate[*idx])
                         }
+                        let fids = self.fids.clone();
                         self.candidate.truncate(self.candidate_len.pop().unwrap());
-                        return Some(out);
+                        self.fids.pop();
+                        return Some((fids, out));
                     }
                     // We're not done yet
                     self.right();
@@ -281,10 +294,10 @@ mod test {
     }
 
     impl SkipIterator for TrivialIterator {
-        fn next(&mut self) -> Option<Tuple> {
+        fn next(&mut self) -> Option<(usize, Tuple)> {
             if self.loc < self.payload.len() {
                 self.loc += 1;
-                Some(self.payload[self.loc - 1].clone())
+                Some((self.loc - 1, self.payload[self.loc - 1].clone()))
             } else {
                 None
             }
@@ -315,10 +328,10 @@ mod test {
         ];
         let its: Vec<&mut SkipIterator> = vec![&mut p, &mut q];
         let mut join = Join::new(its, &restricts);
-        assert_eq!(join.next(), Some(vec![0, 2]));
-        assert_eq!(join.next(), Some(vec![3, 2]));
-        assert_eq!(join.next(), None);
-        assert_eq!(join.next(), None);
+        assert_eq!(join.next().map(|x| x.1), Some(vec![0, 2]));
+        assert_eq!(join.next().map(|x| x.1), Some(vec![3, 2]));
+        assert_eq!(join.next().map(|x| x.1), None);
+        assert_eq!(join.next().map(|x| x.1), None);
     }
 
     #[test]

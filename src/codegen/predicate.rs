@@ -100,7 +100,7 @@ pub fn insert(pred: &ir::Predicate) -> quote::Tokens {
     quote! {
         pub fn #insert_name(&mut self, fact: #fact_name) -> usize {
             let tuple = fact.to_tuple(self);
-            self.#tuple_name.insert(&tuple).0
+            self.#tuple_name.insert(&tuple, Provenance::Base).0
         }
     }
 }

@@ -5,5 +5,5 @@
 pub mod tuple;
 pub mod data;
 
-pub use self::tuple::Tuples;
+pub use self::tuple::{Provenance, Tuples};
 pub use self::data::Data;

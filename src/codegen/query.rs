@@ -280,7 +280,7 @@ fn gen_query(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
                 let mut indices: Vec<&mut SkipIterator> = Vec::new();
                 #push_indices
                 Join::new(indices, &self.#query_store.restricts)
-                    .map(|tup| #result2::from_tuple(self, tup)).collect()
+                    .map(|(_, tup)| #result2::from_tuple(self, tup)).collect()
             }
         },
         quote! {
@@ -409,14 +409,14 @@ fn gen_incr(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
 
     (
         quote! {
-            fn #query_incr_tuple_name(&mut self) -> Vec<Vec<usize>> {
+            fn #query_incr_tuple_name(&mut self) -> Vec<(Vec<usize>, Vec<usize>)> {
                 #build_all_subjoins
                 #first_subjoin#(.chain(#rest_subjoin))*
                 .collect()
             }
             pub fn #query_incr_func(&mut self) -> Vec<#query_result> {
                 self.#query_incr_tuple_name2().into_iter()
-                    .map(|tup| #query_result2::from_tuple(self, tup)).collect()
+                    .map(|(_, tup)| #query_result2::from_tuple(self, tup)).collect()
             }
         },
         quote! {

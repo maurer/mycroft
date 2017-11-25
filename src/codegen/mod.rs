@@ -3,7 +3,7 @@
 //! data structures and APIs to provide.
 use ir;
 use quote;
-use syn::{Ident, Lit, IntTy};
+use syn::{Ident, IntTy, Lit};
 use std::collections::BTreeMap;
 
 mod typed;
@@ -120,15 +120,15 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     // Map from constant name to constant type
     let mut consts: BTreeMap<String, String> = BTreeMap::new();
-    for (k, type_) in prog.queries.values().flat_map(|query| {
-        query::consts(query, &prog.predicates)
-    })
+    for (k, type_) in prog.queries
+        .values()
+        .flat_map(|query| query::consts(query, &prog.predicates))
     {
         consts.insert(k, type_);
     }
-    for (k, type_) in prog.rules.values().flat_map(|rule| {
-        rule::consts(rule, &prog.predicates)
-    })
+    for (k, type_) in prog.rules
+        .values()
+        .flat_map(|rule| rule::consts(rule, &prog.predicates))
     {
         consts.insert(k, type_);
     }

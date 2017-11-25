@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter, Error};
+use std::fmt::{Display, Error, Formatter};
 use ast::*;
 
 fn sep_by<T: Display>(sep: &str, mult: &[T], f: &mut Formatter) -> Result<(), Error> {

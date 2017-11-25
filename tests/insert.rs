@@ -17,7 +17,7 @@ Baz{boom: i32, fizz: Vu16}
 
 #[test]
 fn insert_bar() {
-    use mycroft_program::{Database, Bar};
+    use mycroft_program::{Bar, Database};
     let mut db = Database::new();
     let id_3 = db.insert_bar(Bar { arg0: 3 });
     let id_42 = db.insert_bar(Bar { arg0: 42 });
@@ -28,7 +28,7 @@ fn insert_bar() {
 
 #[test]
 fn insert_baz() {
-    use mycroft_program::{Database, Baz};
+    use mycroft_program::{Baz, Database};
     let mut db = Database::new();
     let id_3 = db.insert_baz(Baz {
         boom: 3,

@@ -2,7 +2,7 @@
 //! It would be difficult to avoid generating code due to type-level decisions in terms of what
 //! data structures and APIs to provide.
 use ir;
-use syn::{Ident, Lit, IntTy};
+use syn::{Ident, IntTy, Lit};
 use quote;
 use super::typed;
 
@@ -15,13 +15,11 @@ pub mod names {
     pub fn fields(pred: &ir::Predicate) -> Vec<Ident> {
         match pred.names {
             Some(ref names) => names.iter().cloned().map(Ident::new).collect(),
-            None => {
-                pred.types
-                    .iter()
-                    .enumerate()
-                    .map(|x| Ident::new(format!("arg{}", x.0)))
-                    .collect()
-            }
+            None => pred.types
+                .iter()
+                .enumerate()
+                .map(|x| Ident::new(format!("arg{}", x.0)))
+                .collect(),
         }
     }
 

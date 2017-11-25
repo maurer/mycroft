@@ -1,7 +1,7 @@
 use ir;
-use syn::{Ident, Lit, IntTy};
+use syn::{Ident, IntTy, Lit};
 use quote;
-use super::{typed, predicate};
+use super::{predicate, typed};
 use std::collections::BTreeMap;
 
 pub mod names {

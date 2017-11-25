@@ -1,6 +1,6 @@
 use ir;
 use quote;
-use syn::{Lit, IntTy, Ident};
+use syn::{Ident, IntTy, Lit};
 use std::collections::BTreeMap;
 use super::{predicate, query, typed};
 
@@ -67,8 +67,8 @@ pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
         let store = typed::store(type_, &quote! {self.#field_name});
         let index_lit = Lit::Int(index as u64, IntTy::Usize);
         stores.push(quote! {
-                out[#index_lit] = #store;
-            });
+            out[#index_lit] = #store;
+        });
     }
 
     let arity = Lit::Int(func_vars.len() as u64, IntTy::Usize);
@@ -122,8 +122,8 @@ pub fn gen(rule: &ir::Rule) -> quote::Tokens {
         }
         None => {
             quote! {
-            productive |= self.#tuple_name.insert(&[#(#tuple_subs),*]).1;
-        }
+                productive |= self.#tuple_name.insert(&[#(#tuple_subs),*]).1;
+            }
         }
     };
 

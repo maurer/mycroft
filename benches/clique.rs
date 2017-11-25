@@ -1,4 +1,4 @@
-#![feature(proc_macro,test)]
+#![feature(proc_macro, test)]
 extern crate mycroft;
 extern crate mycroft_macros;
 extern crate mycroft_support;

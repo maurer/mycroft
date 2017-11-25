@@ -1,4 +1,4 @@
-use syn::{Ident, Lit, IntTy};
+use syn::{Ident, IntTy, Lit};
 use codegen::snakize;
 use quote;
 // Whether the type can be cast into a usize rather than using typed storage

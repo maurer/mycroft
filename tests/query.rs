@@ -20,7 +20,7 @@ Baz{boom: i32, fizz: Vu16, bash: u64}
 
 #[test]
 fn basic_queries() {
-    use mycroft_program::{Database, Bar, Baz};
+    use mycroft_program::{Bar, Baz, Database};
     let mut db = Database::new();
     db.insert_bar(Bar { arg0: 3 });
     db.insert_bar(Bar { arg0: 42 });
@@ -52,7 +52,7 @@ fn basic_queries() {
 
 #[test]
 fn incremental_queries() {
-    use mycroft_program::{Database, Bar, Baz};
+    use mycroft_program::{Bar, Baz, Database};
     let mut db = Database::new();
     assert_eq!(db.query_ordered().len(), 0);
     assert_eq!(db.query_incr_ordered().len(), 0);

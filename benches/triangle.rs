@@ -3,8 +3,8 @@
 extern crate mycroft;
 extern crate mycroft_macros;
 extern crate mycroft_support;
-extern crate test;
 extern crate rand;
+extern crate test;
 
 use mycroft_macros::mycroft_program;
 use test::Bencher;

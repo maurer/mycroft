@@ -29,7 +29,7 @@ join_rule: JoinOut {join_out: join_out, idx: idx} <- Bar(idx) & Baz{fizz: join_o
 
 #[test]
 fn rule_invoke() {
-    use mycroft_program::{Database, Bar, Baz};
+    use mycroft_program::{Bar, Baz, Database};
     let mut db = Database::new();
     db.insert_bar(Bar { arg0: 3 });
     db.insert_bar(Bar { arg0: 42 });
@@ -70,7 +70,7 @@ fn rule_invoke() {
 
 #[test]
 fn all_invoke() {
-    use mycroft_program::{Database, Bar, Baz};
+    use mycroft_program::{Bar, Baz, Database};
     let mut db = Database::new();
     db.insert_bar(Bar { arg0: 3 });
     db.insert_bar(Bar { arg0: 42 });

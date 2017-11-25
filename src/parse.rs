@@ -2,9 +2,17 @@
 #![cfg_attr(feature = "cargo-clippy", allow(unneeded_field_pattern))]
 //! Provides parsing functions for the Mycroft language.
 use ast::*;
-use combine::{any, between, many, not_followed_by, optional, parser, try, Parser, sep_by1};
-use combine::char::{char, digit, letter, spaces, string};
+use combine::{any, between, many, not_followed_by, optional, parser, skip_many, try, Parser,
+              sep_by1};
+use combine::char::{char, digit, letter, newline, spaces, string};
 use combine::primitives::{Consumed, Stream};
+
+parser! {
+    fn comment[I]()(I) -> ()
+        where [I: Stream<Item=char>] {
+        (string("//"), skip_many(not_followed_by(newline()).with(any())), newline(), try(spaces())).map(|_| ())
+    }
+}
 
 parser! {
     fn char_seq[I, P, Q](p0: P, p: Q)(I) -> String
@@ -229,11 +237,15 @@ parser! {
     pub fn program[I]()(I) -> Program
         where [I: Stream<Item=char>] {
         (spaces(),
-        many(try(predicate())), many(try(query())), many(try(rule()))).map(|ps| Program {
-            predicates: ps.1,
-            queries: ps.2,
-            rules: ps.3,
-        })
+        many(try(skip_many(comment()).with(predicate()))),
+        many(try(skip_many(comment()).with(query()))),
+        many(try(skip_many(comment()).with(rule()))),
+        skip_many(comment()))
+            .map(|ps| Program {
+                predicates: ps.1,
+                queries: ps.2,
+                rules: ps.3,
+            })
     }
 }
 
@@ -260,6 +272,7 @@ mod test {
     fn preds() {
         let pred_prog_code = r#"
             bar(bang)
+            // A comment (dropped by parser)
             baz{boom: bash, fizz: buzz}
         "#;
         let pred_prog = Program {
@@ -292,6 +305,7 @@ mod test {
     fn trivial_query() {
         let query_prog_code = r#"
             bar(bang)
+            // Between modes
             ?bars: bar(x)
         "#;
         let query_prog = Program {

@@ -2,9 +2,9 @@
 #![cfg_attr(feature = "cargo-clippy", allow(unneeded_field_pattern))]
 //! Provides parsing functions for the Mycroft language.
 use ast::*;
-use combine::{parser, Parser, many, between, sep_by1, try, optional, any, not_followed_by};
-use combine::char::{letter, spaces, char, digit, string};
-use combine::primitives::{Stream, Consumed};
+use combine::{any, between, many, not_followed_by, optional, parser, try, Parser, sep_by1};
+use combine::char::{char, digit, letter, spaces, string};
+use combine::primitives::{Consumed, Stream};
 
 parser! {
     fn char_seq[I, P, Q](p0: P, p: Q)(I) -> String

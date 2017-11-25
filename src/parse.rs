@@ -142,6 +142,24 @@ parser! {
     }
 }
 
+// TODO: consider more thoroughly dedup with named_fields when syntax is finalized
+parser! {
+    fn named_fields_match[I]()(I) -> Fields<Match>
+        where [I: Stream<Item=char>] {
+        let field = (ident().skip(lex_char(':')), match_()).map(|f| {
+            NamedField {
+                name: f.0,
+                val: f.1
+            }});
+        let shortcut_field = try(field).or(ident().map(|i| NamedField {
+            name: i.clone(),
+            val: Match::Var(i.clone()),
+        }));
+        between(lex_char('{'), lex_char('}'),
+                sep_by1(shortcut_field, lex_char(','))).map(Fields::Named)
+    }
+}
+
 parser! {
     fn predicate[I]()(I) -> Predicate
         where [I: Stream<Item=char>] {
@@ -158,7 +176,7 @@ parser! {
     fn clause[I]()(I) -> Clause
         where [I: Stream<Item=char>] {
         let pred_name = ident();
-        let matches = ord_fields(match_()).or(named_fields(match_()));
+        let matches = ord_fields(match_()).or(named_fields_match());
         (pred_name, matches).map(|c| Clause {
             pred_name: c.0,
             matches: c.1

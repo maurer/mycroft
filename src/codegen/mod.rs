@@ -188,12 +188,14 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     #(#query_registrations)*
                     db
                 }
+                pub fn run_rules_once(&mut self) -> bool {
+                    let mut productive = false;
+                    #(productive |= self.#rule_invokes();)*
+                    productive
+                }
                 pub fn run_rules(&mut self) {
                     let mut productive = true;
-                    while productive {
-                        productive = false;
-                        #(productive |= self.#rule_invokes();)*
-                    }
+                    while self.run_rules_once() {}
                 }
                 #(#pred_inserts)*
                 #(#query_funcs)*

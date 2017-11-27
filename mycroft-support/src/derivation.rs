@@ -49,8 +49,8 @@ impl RawDerivation {
     /// the justification for a fact is circular, or has been retracted.
     pub fn from_storage<'a, F, G>(
         fact: &Fact,
-        tuple_func: F,
-        rule_func: G,
+        tuple_func: &F,
+        rule_func: &G,
         spine: HashSet<Fact>,
     ) -> Option<RawDerivation>
     where
@@ -79,12 +79,9 @@ impl RawDerivation {
                         }
                         let mut sub_spine = spine.clone();
                         sub_spine.insert(sub_fact.clone());
-                        if let Some(derivation) = RawDerivation::from_storage(
-                            &sub_fact,
-                            &tuple_func,
-                            &rule_func,
-                            sub_spine,
-                        ) {
+                        if let Some(derivation) =
+                            RawDerivation::from_storage(&sub_fact, tuple_func, rule_func, sub_spine)
+                        {
                             let depth = derivation.depth();
                             if depth < min_depth {
                                 min_depth = depth;
@@ -121,7 +118,7 @@ pub enum Derivation<F> {
 impl<F> Derivation<F> {
     /// Takes a raw derivation and projection functions for facts and rule names, and extracts the
     /// derivation details.
-    pub fn from_raw<P, Q>(d: RawDerivation, fact_proj: P, rule_names: Q) -> Self
+    pub fn from_raw<P, Q>(d: RawDerivation, fact_proj: &P, rule_names: &Q) -> Self
     where
         P: Fn(&Fact) -> F,
         Q: Fn(usize) -> &'static str,
@@ -139,7 +136,7 @@ impl<F> Derivation<F> {
                 rule: rule_names(rule_id),
                 sub_derivations: sub_derivations
                     .into_iter()
-                    .map(|d| Derivation::from_raw(d, &fact_proj, &rule_names))
+                    .map(|d| Derivation::from_raw(d, fact_proj, rule_names))
                     .collect(),
             },
         }

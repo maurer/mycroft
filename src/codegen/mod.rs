@@ -261,8 +261,8 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     }
                 }
                 fn raw_derivation(&self, fact: &Fact) -> RawDerivation {
-                    RawDerivation::from_storage(fact, |key| self.tuple_by_id(key),
-                       rule_slot_to_pred, HashSet::new()).expect("No valid derivation for fact?")
+                    RawDerivation::from_storage(fact, &|key| self.tuple_by_id(key),
+                       &rule_slot_to_pred, HashSet::new()).expect("No valid derivation for fact?")
                 }
                 fn project_fact(&self, f: &Fact) -> AnyFact {
                     let tuple = self.tuple_by_id(f.predicate_id).get(f.fact_id);
@@ -278,7 +278,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                         fact_id: fact_id
                     };
                     let raw = self.raw_derivation(&fact);
-                    Derivation::from_raw(raw, |f| self.project_fact(f), pred_id_to_name)
+                    Derivation::from_raw(raw, &|f| self.project_fact(f), &pred_id_to_name)
                 }
                 pub fn run_rules_once(&mut self) -> Vec<usize> {
                     let mut productive = Vec::new();

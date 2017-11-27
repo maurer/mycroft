@@ -10,7 +10,8 @@ use combine::primitives::{Consumed, Stream};
 parser! {
     fn comment[I]()(I) -> ()
         where [I: Stream<Item=char>] {
-        (string("//"), skip_many(not_followed_by(newline()).with(any())), newline(), try(spaces())).map(|_| ())
+        (string("//"), skip_many(not_followed_by(newline()).with(any())), newline(), try(spaces()))
+            .map(|_| ())
     }
 }
 

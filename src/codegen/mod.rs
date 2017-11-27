@@ -280,14 +280,13 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     let raw = self.raw_derivation(&fact);
                     Derivation::from_raw(raw, |f| self.project_fact(f), pred_id_to_name)
                 }
-                pub fn run_rules_once(&mut self) -> bool {
-                    let mut productive = false;
-                    #(productive |= self.#rule_invokes();)*
+                pub fn run_rules_once(&mut self) -> Vec<usize> {
+                    let mut productive = Vec::new();
+                    #(productive.extend(&self.#rule_invokes());)*
                     productive
                 }
                 pub fn run_rules(&mut self) {
-                    let mut productive = true;
-                    while self.run_rules_once() {}
+                    while !self.run_rules_once().is_empty() {}
                 }
                 #(#pred_inserts)*
                 #(#query_funcs)*

@@ -116,13 +116,19 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
                 for extra_vars in #func(&#view::from_tuple(self, tuple.clone())) {
                     let mut tuple = tuple.clone();
                     tuple.extend(&extra_vars.to_tuple(self));
-                    productive |= self.#tuple_name.insert(&[#(#tuple_subs),*], p.clone()).1
+                    let (fid, new) = self.#tuple_name.insert(&[#(#tuple_subs),*], p.clone());
+                    if new {
+                        productive.push(fid)
+                    }
                 }
             }
         }
         None => {
             quote! {
-                productive |= self.#tuple_name.insert(&[#(#tuple_subs),*], p).1;
+                let (fid, new) = self.#tuple_name.insert(&[#(#tuple_subs),*], p);
+                if new {
+                    productive.push(fid)
+                }
             }
         }
     };
@@ -130,8 +136,8 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
     let rule_id_k = Lit::Int(rule_id as u64, IntTy::Usize);
 
     quote! {
-        pub fn #rule_invoke_name(&mut self) -> bool {
-            let mut productive = false;
+        pub fn #rule_invoke_name(&mut self) -> Vec<usize> {
+            let mut productive = Vec::new();
             let tuples = self.#query_incr_tuple_name();
             for (fids, tuple) in tuples {
                 let p = Provenance::Rule {

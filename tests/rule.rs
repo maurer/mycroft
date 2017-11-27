@@ -35,7 +35,7 @@ fn rule_invoke() {
     db.insert_bar(Bar { arg0: 42 });
     db.insert_bar(Bar { arg0: 3 });
     assert_eq!(db.query_check_ordered().len(), 0);
-    assert!(db.rule_invoke_ordered_rule());
+    assert!(!db.rule_invoke_ordered_rule().is_empty());
     assert_eq!(db.query_check_ordered().len(), 1);
     db.insert_baz(Baz {
         boom: 2,
@@ -58,14 +58,14 @@ fn rule_invoke() {
         bash: 42,
     });
     assert_eq!(db.query_check_named().len(), 0);
-    assert!(db.rule_invoke_named_rule());
+    assert!(!db.rule_invoke_named_rule().is_empty());
     assert_eq!(db.query_check_named().len(), 2);
     assert_eq!(db.query_check_join().len(), 0);
-    assert!(db.rule_invoke_join_rule());
+    assert!(!db.rule_invoke_join_rule().is_empty());
     assert_eq!(db.query_check_join().len(), 2);
-    assert!(!db.rule_invoke_ordered_rule());
-    assert!(!db.rule_invoke_named_rule());
-    assert!(!db.rule_invoke_join_rule());
+    assert!(db.rule_invoke_ordered_rule().is_empty());
+    assert!(db.rule_invoke_named_rule().is_empty());
+    assert!(db.rule_invoke_join_rule().is_empty());
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn all_invoke() {
     db.insert_bar(Bar { arg0: 3 });
     db.insert_bar(Bar { arg0: 42 });
     db.insert_bar(Bar { arg0: 3 });
-    assert!(db.rule_invoke_ordered_rule());
+    assert!(!db.rule_invoke_ordered_rule().is_empty());
     db.insert_baz(Baz {
         boom: 2,
         fizz: vec![3, 4],

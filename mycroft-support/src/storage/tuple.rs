@@ -83,12 +83,8 @@ pub enum Provenance {
     Base,
     /// The named rule derived the fact using the provided premises
     Rule {
-        // We could use a rule_id instead of a rule_name, defined by the sorted order of rule
-        // names. This would be slightly faster if we need to do an operation on the whole
-        // provenance tree frequently, but this will be easier to debug for now.
-        // TODO: switch to rule IDs
-        /// Name of rule used
-        rule_name: &'static str,
+        /// Index of rule in alphabetical order
+        rule_id: usize,
         /// Which facts were used - which tuplestore to look up from depends on the rule
         premises: Vec<usize>,
     },
@@ -235,6 +231,14 @@ impl Tuples {
             out.push(self.inner[i][key]);
         }
         out
+    }
+    /// Get the fact referenced by the provided key
+    pub fn get(&self, key: usize) -> Vec<usize> {
+        self.get_unchecked(key)
+    }
+    /// Return the set of ways this tuple was derived
+    pub fn get_provenance(&self, key: usize) -> &BTreeSet<Provenance> {
+        &self.provenance[key]
     }
     /// Adds a new element to the tuple store.
     /// The arity of the provided value must equal the arity of the tuple store.

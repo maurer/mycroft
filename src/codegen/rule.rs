@@ -1,6 +1,6 @@
 use ir;
 use quote;
-use syn::{Ident, IntTy, Lit, StrStyle};
+use syn::{Ident, IntTy, Lit};
 use std::collections::BTreeMap;
 use super::{predicate, query, typed};
 
@@ -90,7 +90,7 @@ pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
     }
 }
 
-pub fn gen(rule: &ir::Rule) -> quote::Tokens {
+pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
     let tuple_subs: Vec<quote::Tokens> = rule.head_vals
         .iter()
         .map(|hv| match *hv {
@@ -127,7 +127,7 @@ pub fn gen(rule: &ir::Rule) -> quote::Tokens {
         }
     };
 
-    let rule_name_str = Lit::Str(rule.name.to_string(), StrStyle::Cooked);
+    let rule_id_k = Lit::Int(rule_id as u64, IntTy::Usize);
 
     quote! {
         pub fn #rule_invoke_name(&mut self) -> bool {
@@ -135,12 +135,33 @@ pub fn gen(rule: &ir::Rule) -> quote::Tokens {
             let tuples = self.#query_incr_tuple_name();
             for (fids, tuple) in tuples {
                 let p = Provenance::Rule {
-                    rule_name: #rule_name_str,
+                    rule_id: #rule_id_k,
                     premises: fids
                 };
                 #tuple_action
             }
             productive
         }
+    }
+}
+
+pub fn preds(
+    rule_id: usize,
+    query: &ir::Query,
+    pred_name_to_id: &BTreeMap<&str, usize>,
+) -> quote::Tokens {
+    let mut rule_id_ks = Vec::new();
+    let mut col_ks = Vec::new();
+    let mut pred_id_ks = Vec::new();
+    for (col, pred) in query.predicates.iter().enumerate() {
+        col_ks.push(Lit::Int(col as u64, IntTy::Usize));
+        rule_id_ks.push(Lit::Int(rule_id as u64, IntTy::Usize));
+        pred_id_ks.push(Lit::Int(
+            pred_name_to_id[pred.as_str()] as u64,
+            IntTy::Usize,
+        ));
+    }
+    quote! {
+        #((#rule_id_ks, #col_ks) => #pred_id_ks,)*
     }
 }

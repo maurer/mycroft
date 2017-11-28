@@ -53,7 +53,8 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     // Declarations of predicate fact structs
     let pred_fact_decls = prog.predicates
         .values()
-        .map(predicate::fact)
+        .enumerate()
+        .map(|(i, f)| predicate::fact(i, f))
         .collect::<Vec<_>>();
     // Inserter functions for fact structs
     let pred_inserts = prog.predicates
@@ -194,8 +195,13 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         pred_name_strs.push(Lit::Str(s.clone(), StrStyle::Cooked));
         pred_id_ks.push(Lit::Int(i as u64, IntTy::Usize));
     }
-    let pred_name_strs2 = pred_name_strs.clone();
-    let pred_id_ks2 = pred_id_ks.clone();
+
+    let mut rule_name_strs = Vec::new();
+    let mut rule_id_ks = Vec::new();
+    for (i, s) in prog.rules.keys().enumerate() {
+        rule_name_strs.push(Lit::Str(s.clone(), StrStyle::Cooked));
+        rule_id_ks.push(Lit::Int(i as u64, IntTy::Usize));
+    }
 
     // TODO add naming feature for program so that mycroft can be invoked multiple times
     // in the same module.
@@ -220,6 +226,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             #(#pred_fact_decls)*
             #(#query_structs)*
             #(#rule_decls)*
+            #[derive(Debug)]
             pub enum AnyFact {
                 #(#fact_names(#fact_names2),)*
             }
@@ -235,9 +242,9 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     _ => panic!("Unmatched pred name")
                 }
             }
-            fn pred_id_to_name(pred_id: usize) -> &'static str {
-                match pred_id {
-                    #(#pred_id_ks2 => #pred_name_strs2,)*
+            fn rule_id_to_name(rule_id: usize) -> &'static str {
+                match rule_id {
+                    #(#rule_id_ks => #rule_name_strs,)*
                     _ => panic!("Internal error, unmatched pred id")
                 }
             }
@@ -261,8 +268,9 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     }
                 }
                 fn raw_derivation(&self, fact: &Fact) -> RawDerivation {
+                    println!("Raw derivation of {:?}", fact);
                     RawDerivation::from_storage(fact, &|key| self.tuple_by_id(key),
-                       &rule_slot_to_pred, HashSet::new()).expect("No valid derivation for fact?")
+                       &rule_slot_to_pred, HashSet::new(), 2).expect("No valid derivation for fact?")
                 }
                 fn project_fact(&self, f: &Fact) -> AnyFact {
                     let tuple = self.tuple_by_id(f.predicate_id).get(f.fact_id);
@@ -272,15 +280,11 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                         _ => panic!("Internal error, unbound predicate ID in fact projection")
                     }
                 }
-                pub fn derivation(&self, predicate: &str, fact_id: usize) -> Derivation<AnyFact> {
-                    let fact = Fact {
-                        predicate_id: pred_name_to_id(predicate),
-                        fact_id: fact_id
-                    };
-                    let raw = self.raw_derivation(&fact);
-                    Derivation::from_raw(raw, &|f| self.project_fact(f), &pred_id_to_name)
+                pub fn derivation(&self, fact: &Fact) -> Derivation<AnyFact> {
+                    let raw = self.raw_derivation(fact);
+                    Derivation::from_raw(raw, &|f| self.project_fact(f), &rule_id_to_name)
                 }
-                pub fn run_rules_once(&mut self) -> Vec<usize> {
+                pub fn run_rules_once(&mut self) -> Vec<Fact> {
                     let mut productive = Vec::new();
                     #(productive.extend(&self.#rule_invokes());)*
                     productive

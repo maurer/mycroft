@@ -91,6 +91,7 @@ pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
 }
 
 pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
+    let pred_id_k = predicate::names::id(&rule.head_pred);
     let tuple_subs: Vec<quote::Tokens> = rule.head_vals
         .iter()
         .map(|hv| match *hv {
@@ -118,7 +119,10 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
                     tuple.extend(&extra_vars.to_tuple(self));
                     let (fid, new) = self.#tuple_name.insert(&[#(#tuple_subs),*], p.clone());
                     if new {
-                        productive.push(fid)
+                        productive.push(Fact {
+                            predicate_id: #pred_id_k,
+                            fact_id: fid
+                        })
                     }
                 }
             }
@@ -127,7 +131,10 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
             quote! {
                 let (fid, new) = self.#tuple_name.insert(&[#(#tuple_subs),*], p);
                 if new {
-                    productive.push(fid)
+                    productive.push(Fact {
+                            predicate_id: #pred_id_k,
+                            fact_id: fid
+                    })
                 }
             }
         }
@@ -136,7 +143,7 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
     let rule_id_k = Lit::Int(rule_id as u64, IntTy::Usize);
 
     quote! {
-        pub fn #rule_invoke_name(&mut self) -> Vec<usize> {
+        pub fn #rule_invoke_name(&mut self) -> Vec<Fact> {
             let mut productive = Vec::new();
             let tuples = self.#query_incr_tuple_name();
             for (fids, tuple) in tuples {

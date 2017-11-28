@@ -249,7 +249,10 @@ impl<'a> Iterator for Join<'a> {
                         for idx in &self.var_old_to_new {
                             out.push(self.candidate[*idx])
                         }
-                        let fids = self.fids.clone();
+                        let mut fids = self.fids.clone();
+                        for (new, old) in self.order.iter().enumerate() {
+                            fids[*old] = self.fids[new];
+                        }
                         self.candidate.truncate(self.candidate_len.pop().unwrap());
                         self.fids.pop();
                         return Some((fids, out));
@@ -262,6 +265,8 @@ impl<'a> Iterator for Join<'a> {
                         self.candidate.truncate(self.candidate_len.pop().unwrap());
                         return None;
                     }
+                    // TODO: left() abstraction broken with new fids, this hacks around it
+                    self.fids.push(0);
                     self.left();
                 }
             }

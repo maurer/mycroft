@@ -37,12 +37,19 @@ pub mod names {
     pub fn tuple(pred_name: &str) -> Ident {
         Ident::new(format!("pred_{}", pred_name.to_lowercase()))
     }
+
+    // Name of the constant where the predicate's ID is stored
+    pub fn id(pred_name: &str) -> Ident {
+        Ident::new(format!("PRED_ID_{}", pred_name.to_uppercase()))
+    }
 }
 
 // Generates a fact type and tuple conversion between it
-pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
+pub fn fact(pred_id: usize, pred: &ir::Predicate) -> quote::Tokens {
     let fact_name = names::fact(pred);
     let fact_name2 = fact_name.clone();
+    let pred_id_name = names::id(&pred.name);
+    let pred_id_k = Lit::Int(pred_id as u64, IntTy::Usize);
 
     let field_types = pred.types
         .iter()
@@ -74,6 +81,8 @@ pub fn fact(pred: &ir::Predicate) -> quote::Tokens {
         .collect::<Vec<_>>();
 
     quote! {
+        const #pred_id_name: usize = #pred_id_k;
+        #[derive(Debug)]
         pub struct #fact_name {
             #(pub #field_names: #field_types),*
         }

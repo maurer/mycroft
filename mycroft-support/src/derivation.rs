@@ -21,6 +21,11 @@ pub enum RawDerivation {
         /// The fact which was in the IDB
         fact: Fact,
     },
+    /// The reasoning behind this has been elided to look only at the top of a proof tree
+    Truncated {
+        /// The fact which we stopped at
+        fact: Fact,
+    },
     /// This fact was generated through a rule
     Rule {
         /// The fact being derived at this step
@@ -38,6 +43,7 @@ impl RawDerivation {
     pub fn depth(&self) -> usize {
         match *self {
             RawDerivation::Base { .. } => 0,
+            RawDerivation::Truncated { .. } => 0,
             RawDerivation::Rule {
                 ref sub_derivations,
                 ..
@@ -52,11 +58,15 @@ impl RawDerivation {
         tuple_func: &F,
         rule_func: &G,
         spine: HashSet<Fact>,
+        tree_depth: usize,
     ) -> Option<RawDerivation>
     where
         F: Fn(usize) -> &'a super::storage::Tuples,
         G: Fn(usize, usize) -> usize,
     {
+        if tree_depth == 0 {
+            return Some(RawDerivation::Truncated { fact: *fact });
+        }
         let tuples = tuple_func(fact.predicate_id);
         let mut min_depth: usize = ::std::usize::MAX;
         let mut out = None;
@@ -68,6 +78,8 @@ impl RawDerivation {
                     rule_id,
                     ref premises,
                 } => {
+                    let mut sub_out = Vec::new();
+                    let mut local_depth = 0;
                     for (col, premise) in premises.iter().enumerate() {
                         let sub_fact = Fact {
                             predicate_id: rule_func(rule_id, col),
@@ -79,16 +91,29 @@ impl RawDerivation {
                         }
                         let mut sub_spine = spine.clone();
                         sub_spine.insert(sub_fact.clone());
-                        if let Some(derivation) =
-                            RawDerivation::from_storage(&sub_fact, tuple_func, rule_func, sub_spine)
-                        {
+                        if let Some(derivation) = RawDerivation::from_storage(
+                            &sub_fact,
+                            tuple_func,
+                            rule_func,
+                            sub_spine,
+                            tree_depth - 1,
+                        ) {
                             let depth = derivation.depth();
-                            if depth < min_depth {
-                                min_depth = depth;
-                                out = Some(derivation);
+                            local_depth = ::std::cmp::max(depth, local_depth);
+                            if local_depth > min_depth {
+                                continue 'prov_loop;
                             }
+                            sub_out.push(derivation);
+                        } else {
+                            continue 'prov_loop;
                         }
                     }
+                    out = Some(RawDerivation::Rule {
+                        fact: *fact,
+                        rule_id: rule_id,
+                        sub_derivations: sub_out,
+                    });
+                    min_depth = local_depth;
                 }
             }
         }
@@ -124,7 +149,8 @@ impl<F> Derivation<F> {
         Q: Fn(usize) -> &'static str,
     {
         match d {
-            RawDerivation::Base { fact } => Derivation::Base {
+            // TODO better final representation for truncation?
+            RawDerivation::Base { fact } | RawDerivation::Truncated { fact } => Derivation::Base {
                 fact: fact_proj(&fact),
             },
             RawDerivation::Rule {
@@ -140,5 +166,35 @@ impl<F> Derivation<F> {
                     .collect(),
             },
         }
+    }
+}
+
+use std::fmt::{Display, Formatter, Result};
+
+impl<F: Display> Display for Derivation<F> {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        self.print_indented(f, 0)
+    }
+}
+
+impl<F: Display> Derivation<F> {
+    fn print_indented(&self, f: &mut Formatter, indent: usize) -> Result {
+        for _ in 0..indent {
+            write!(f, "  ")?
+        }
+        match *self {
+            Derivation::Base { ref fact } => write!(f, "{}.", fact)?,
+            Derivation::Rule {
+                ref fact,
+                ref rule,
+                ref sub_derivations,
+            } => {
+                write!(f, "{} by {},\n", fact, rule)?;
+                for sub in sub_derivations {
+                    sub.print_indented(f, indent + 1)?;
+                }
+            }
+        }
+        Ok(())
     }
 }

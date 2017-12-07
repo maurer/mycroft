@@ -97,24 +97,36 @@ pub struct Predicate {
     pub names: Option<Vec<String>>,
     /// Types of the predicate fields
     pub types: Vec<String>,
+    /// Aggregators, if any, of the predicate fields
+    pub aggs: Vec<Option<String>>,
 }
 
 impl Predicate {
     /// Transforms predicate AST into predicate IR
     pub fn from_ast(ast_pred: ast::Predicate) -> Self {
         let name = ast_pred.name.clone();
-        let (names, types) = match ast_pred.fields {
-            ast::Fields::Ordered(ref types_) => (None, types_.clone()),
+        let (names, types, aggs) = match ast_pred.fields {
+            ast::Fields::Ordered(ref vals) => {
+                let mut types = Vec::new();
+                let mut aggs = Vec::new();
+                for val in vals {
+                    types.push(val.type_.clone());
+                    aggs.push(val.aggregator.clone());
+                }
+                (None, types, aggs)
+            }
             ast::Fields::Named(ref fields) => {
                 let mut names = Vec::new();
                 let mut types = Vec::new();
+                let mut aggs = Vec::new();
                 let mut sorted_fields: Vec<_> = fields.clone();
                 sorted_fields.sort();
                 for field in sorted_fields {
                     names.push(field.name);
-                    types.push(field.val);
+                    types.push(field.val.type_);
+                    aggs.push(field.val.aggregator);
                 }
-                (Some(names), types)
+                (Some(names), types, aggs)
             }
         };
         Predicate {
@@ -122,6 +134,7 @@ impl Predicate {
             ast: ast_pred,
             names: names,
             types: types,
+            aggs: aggs,
         }
     }
 }
@@ -192,7 +205,9 @@ fn find_var(hay: &[String], needle: &str) -> Result<usize> {
             return Ok(idx);
         }
     }
-    Err(ErrorKind::VarNotFound(hay.to_vec(), needle.to_string()).into())
+    Err(
+        ErrorKind::VarNotFound(hay.to_vec(), needle.to_string()).into(),
+    )
 }
 
 impl Rule {
@@ -276,7 +291,9 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
                 return Err(ErrorKind::MatchStyle(Box::new(pred.clone())).into());
             }
             if v.len() != pred.types.len() {
-                return Err(ErrorKind::ShortClause(Box::new(pred.clone()), v.len()).into());
+                return Err(
+                    ErrorKind::ShortClause(Box::new(pred.clone()), v.len()).into(),
+                );
             }
             Ok(v.iter().cloned().enumerate().collect())
         }
@@ -288,7 +305,9 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
             let mut out = Vec::new();
             for &ast::NamedField { ref name, ref val } in nm.iter() {
                 if seen_fields.contains(name) {
-                    return Err(ErrorKind::DoubleBind(Box::new(pred.clone()), name.clone()).into());
+                    return Err(
+                        ErrorKind::DoubleBind(Box::new(pred.clone()), name.clone()).into(),
+                    );
                 }
                 seen_fields.insert(name.clone());
                 // This ugly bit of code just finds the index of the name present in the named
@@ -491,7 +510,9 @@ impl Program {
             if queries.contains_key(&ir_query.name) {
                 let first = queries.remove(&ir_query.name).unwrap().ast;
                 let second = ir_query.ast;
-                return Err(ErrorKind::QueryDefinedTwice(Box::new(first), Box::new(second)).into());
+                return Err(
+                    ErrorKind::QueryDefinedTwice(Box::new(first), Box::new(second)).into(),
+                );
             }
             queries.insert(ir_query.name.clone(), ir_query);
         }
@@ -502,7 +523,9 @@ impl Program {
             if rules.contains_key(&ir_rule.name) {
                 let first = rules.remove(&ir_rule.name).unwrap().ast;
                 let second = ir_rule.ast;
-                return Err(ErrorKind::RuleDefinedTwice(Box::new(first), Box::new(second)).into());
+                return Err(
+                    ErrorKind::RuleDefinedTwice(Box::new(first), Box::new(second)).into(),
+                );
             }
             rules.insert(ir_rule.name.clone(), ir_rule);
         }

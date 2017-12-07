@@ -36,6 +36,19 @@ pub enum Fields<T> {
     Named(Vec<NamedField<T>>),
 }
 
+/// `FieldType` describes how a particular field in a predicate will be stored and viewed
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FieldType {
+    /// Type of values stored
+    pub type_: String,
+    /// If `None`, values will be viewed as-is. If `Some(func_name)`, matches against this
+    /// predicate may return any subset of matching values, aggregated together via the provided
+    /// aggegation function.
+    /// Any provided function must be commutative and associative for proper functioning, and have
+    /// type (T, T) -> T
+    pub aggregator: Option<String>,
+}
+
 /// A `Predicate` can essentially be seen as a fact-type declaration. It describes the types of
 /// each field of a particular relation, and prescribes how it is to be matched (by index or by
 /// name).
@@ -44,7 +57,7 @@ pub struct Predicate {
     /// Predicate name
     pub name: String,
     /// Predicate fields. The associated value is the field type.
-    pub fields: Fields<String>,
+    pub fields: Fields<FieldType>,
 }
 
 /// A `Query` is a predefined question that can be asked of the database. Appropriate indexes and

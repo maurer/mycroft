@@ -170,10 +170,22 @@ parser! {
 }
 
 parser! {
+    fn field_type[I]()(I) -> FieldType
+        where [I: Stream<Item=char>] {
+        let type_ = ident();
+        let agg = lex_char('^').with(ident());
+        (type_, optional(agg)).map(|p| FieldType {
+            type_: p.0,
+            aggregator: p.1
+        })
+    }
+}
+
+parser! {
     fn predicate[I]()(I) -> Predicate
         where [I: Stream<Item=char>] {
         let pred_name = ident();
-        let pred_body = ord_fields(ident()).or(named_fields(ident()));
+        let pred_body = ord_fields(field_type()).or(named_fields(field_type()));
         (pred_name, pred_body).map(|p| Predicate {
             name: p.0,
             fields: p.1
@@ -280,18 +292,29 @@ mod test {
             predicates: vec![
                 Predicate {
                     name: "bar".to_string(),
-                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                    fields: Fields::Ordered(vec![
+                        FieldType {
+                            type_: "bang".to_string(),
+                            aggregator: None,
+                        },
+                    ]),
                 },
                 Predicate {
                     name: "baz".to_string(),
                     fields: Fields::Named(vec![
                         NamedField {
                             name: "boom".to_string(),
-                            val: "bash".to_string(),
+                            val: FieldType {
+                                type_: "bash".to_string(),
+                                aggregator: None,
+                            },
                         },
                         NamedField {
                             name: "fizz".to_string(),
-                            val: "buzz".to_string(),
+                            val: FieldType {
+                                type_: "buzz".to_string(),
+                                aggregator: None,
+                            },
                         },
                     ]),
                 },
@@ -313,7 +336,12 @@ mod test {
             predicates: vec![
                 Predicate {
                     name: "bar".to_string(),
-                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                    fields: Fields::Ordered(vec![
+                        FieldType {
+                            type_: "bang".to_string(),
+                            aggregator: None,
+                        },
+                    ]),
                 },
             ],
             queries: vec![
@@ -345,15 +373,30 @@ mod test {
             predicates: vec![
                 Predicate {
                     name: "bar".to_string(),
-                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                    fields: Fields::Ordered(vec![
+                        FieldType {
+                            type_: "bang".to_string(),
+                            aggregator: None,
+                        },
+                    ]),
                 },
                 Predicate {
                     name: "baz".to_string(),
-                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                    fields: Fields::Ordered(vec![
+                        FieldType {
+                            type_: "bang".to_string(),
+                            aggregator: None,
+                        },
+                    ]),
                 },
                 Predicate {
                     name: "out".to_string(),
-                    fields: Fields::Ordered(vec!["usize".to_string()]),
+                    fields: Fields::Ordered(vec![
+                        FieldType {
+                            type_: "usize".to_string(),
+                            aggregator: None,
+                        },
+                    ]),
                 },
             ],
             queries: vec![],
@@ -393,15 +436,30 @@ mod test {
             predicates: vec![
                 Predicate {
                     name: "bar".to_string(),
-                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                    fields: Fields::Ordered(vec![
+                        FieldType {
+                            type_: "bang".to_string(),
+                            aggregator: None,
+                        },
+                    ]),
                 },
                 Predicate {
                     name: "baz".to_string(),
-                    fields: Fields::Ordered(vec!["bang".to_string()]),
+                    fields: Fields::Ordered(vec![
+                        FieldType {
+                            type_: "bang".to_string(),
+                            aggregator: None,
+                        },
+                    ]),
                 },
                 Predicate {
                     name: "out".to_string(),
-                    fields: Fields::Ordered(vec!["usize".to_string()]),
+                    fields: Fields::Ordered(vec![
+                        FieldType {
+                            type_: "usize".to_string(),
+                            aggregator: None,
+                        },
+                    ]),
                 },
             ],
             queries: vec![],
@@ -427,6 +485,29 @@ mod test {
             ],
         };
         assert_eq!(Ok((prog, "")), program().parse(code));
+    }
+
+    #[test]
+    fn agg() {
+        let agg_prog_code = r#"
+            bar(bang^bash)
+        "#;
+        let agg_prog = Program {
+            predicates: vec![
+                Predicate {
+                    name: "bar".to_string(),
+                    fields: Fields::Ordered(vec![
+                        FieldType {
+                            type_: "bang".to_string(),
+                            aggregator: Some("bash".to_string()),
+                        },
+                    ]),
+                },
+            ],
+            rules: Vec::new(),
+            queries: Vec::new(),
+        };
+        assert_eq!(Ok((agg_prog, "")), program().parse(agg_prog_code));
     }
 
 }

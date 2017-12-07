@@ -56,6 +56,17 @@ impl Display for Predicate {
     }
 }
 
+impl Display for FieldType {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "{}", self.type_)?;
+        match self.aggregator {
+            Some(ref agg) => write!(f, "^{}", agg)?,
+            None => (),
+        }
+        Ok(())
+    }
+}
+
 impl Display for Query {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(f, "?{}: ", self.name)?;

@@ -11,9 +11,16 @@ use std::cell::UnsafeCell;
 /// Keys produced by this object follow the relation:
 ///
 /// `data[key] == data[key2]` <-> `key == key2`
-#[derive(Clone)]
 pub struct Data<T> {
     raw: Rc<UnsafeCell<RawData<T>>>,
+}
+
+impl<T> Clone for Data<T> {
+    fn clone(&self) -> Self {
+        Self {
+            raw: self.raw.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Eq, Clone, PartialEq)]
@@ -39,7 +46,7 @@ impl<T: PartialEq + Hash> Data<T> {
 
     /// Returns the key for the provided data, relative to the store
     /// If the object is already in the store, it will be dropped, otherwise it will not.
-    pub fn insert(&mut self, data: T) -> usize {
+    pub fn insert(&self, data: T) -> usize {
         unsafe {
             let raw: &mut RawData<T> = &mut *self.raw.get();
             raw.insert(data)

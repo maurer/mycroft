@@ -10,7 +10,7 @@ pub type Tuple = Vec<usize>;
 ///   rewindable.
 pub trait SkipIterator {
     /// Provides the next tuple in the iterator, the fact ID it was derived from
-    fn next(&mut self) -> Option<(usize, Tuple)>;
+    fn next(&mut self) -> Option<(Tuple, Vec<usize>)>;
     /// Sets the iterator position to return the minimum value which is greater than or equal to
     /// the provided min.
     fn skip(&mut self, min: Tuple);
@@ -86,7 +86,7 @@ pub struct Join<'a> {
     // Stack of previous variable assignment lengths so we can rewind choices
     candidate_len: Vec<usize>,
     // Stack of fact ids in use
-    fids: Vec<usize>,
+    fids: Vec<Vec<usize>>,
 }
 
 fn min_possible(
@@ -193,7 +193,7 @@ impl<'a> Join<'a> {
     }
 }
 impl<'a> Iterator for Join<'a> {
-    type Item = (Vec<usize>, Tuple);
+    type Item = (Tuple, Vec<Vec<usize>>);
     fn next(&mut self) -> Option<Self::Item> {
         // Join invariants:
         // 1.) candidate_len.len() indicates the "current" index
@@ -205,7 +205,7 @@ impl<'a> Iterator for Join<'a> {
             let n = self.order[self.candidate_len.len()];
             self.candidate_len.push(self.candidate.len());
             match self.indices[n].next() {
-                Some((fid, tup)) => {
+                Some((tup, fid)) => {
                     self.fids.push(fid);
                     for (f, v) in tup.iter().enumerate() {
                         if let Some(r) = self.restricts[n][f] {
@@ -251,11 +251,11 @@ impl<'a> Iterator for Join<'a> {
                         }
                         let mut fids = self.fids.clone();
                         for (new, old) in self.order.iter().enumerate() {
-                            fids[*old] = self.fids[new];
+                            fids[*old] = self.fids[new].clone();
                         }
                         self.candidate.truncate(self.candidate_len.pop().unwrap());
                         self.fids.pop();
-                        return Some((fids, out));
+                        return Some((out, fids));
                     }
                     // We're not done yet
                     self.right();
@@ -266,7 +266,7 @@ impl<'a> Iterator for Join<'a> {
                         return None;
                     }
                     // TODO: left() abstraction broken with new fids, this hacks around it
-                    self.fids.push(0);
+                    self.fids.push(vec![]);
                     self.left();
                 }
             }
@@ -299,10 +299,10 @@ mod test {
     }
 
     impl SkipIterator for TrivialIterator {
-        fn next(&mut self) -> Option<(usize, Tuple)> {
+        fn next(&mut self) -> Option<(Tuple, Vec<usize>)> {
             if self.loc < self.payload.len() {
                 self.loc += 1;
-                Some((self.loc - 1, self.payload[self.loc - 1].clone()))
+                Some((self.payload[self.loc - 1].clone(), vec![self.loc - 1]))
             } else {
                 None
             }
@@ -333,10 +333,10 @@ mod test {
         ];
         let its: Vec<&mut SkipIterator> = vec![&mut p, &mut q];
         let mut join = Join::new(its, &restricts);
-        assert_eq!(join.next().map(|x| x.1), Some(vec![0, 2]));
-        assert_eq!(join.next().map(|x| x.1), Some(vec![3, 2]));
-        assert_eq!(join.next().map(|x| x.1), None);
-        assert_eq!(join.next().map(|x| x.1), None);
+        assert_eq!(join.next().map(|x| x.0), Some(vec![0, 2]));
+        assert_eq!(join.next().map(|x| x.0), Some(vec![3, 2]));
+        assert_eq!(join.next().map(|x| x.0), None);
+        assert_eq!(join.next().map(|x| x.0), None);
     }
 
     #[test]

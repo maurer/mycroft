@@ -80,32 +80,34 @@ impl RawDerivation {
                 } => {
                     let mut sub_out = Vec::new();
                     let mut local_depth = 0;
-                    for (col, premise) in premises.iter().enumerate() {
-                        let sub_fact = Fact {
-                            predicate_id: rule_func(rule_id, col),
-                            fact_id: *premise,
-                        };
-                        // If the provenance is circular, ignore it
-                        if spine.contains(&sub_fact) {
-                            continue 'prov_loop;
-                        }
-                        let mut sub_spine = spine.clone();
-                        sub_spine.insert(sub_fact.clone());
-                        if let Some(derivation) = RawDerivation::from_storage(
-                            &sub_fact,
-                            tuple_func,
-                            rule_func,
-                            sub_spine,
-                            tree_depth - 1,
-                        ) {
-                            let depth = derivation.depth();
-                            local_depth = ::std::cmp::max(depth, local_depth);
-                            if local_depth > min_depth {
+                    for (col, premises) in premises.iter().enumerate() {
+                        for premise in premises {
+                            let sub_fact = Fact {
+                                predicate_id: rule_func(rule_id, col),
+                                fact_id: *premise,
+                            };
+                            // If the provenance is circular, ignore it
+                            if spine.contains(&sub_fact) {
                                 continue 'prov_loop;
                             }
-                            sub_out.push(derivation);
-                        } else {
-                            continue 'prov_loop;
+                            let mut sub_spine = spine.clone();
+                            sub_spine.insert(sub_fact.clone());
+                            if let Some(derivation) = RawDerivation::from_storage(
+                                &sub_fact,
+                                tuple_func,
+                                rule_func,
+                                sub_spine,
+                                tree_depth - 1,
+                            ) {
+                                let depth = derivation.depth();
+                                local_depth = ::std::cmp::max(depth, local_depth);
+                                if local_depth > min_depth {
+                                    continue 'prov_loop;
+                                }
+                                sub_out.push(derivation);
+                            } else {
+                                continue 'prov_loop;
+                            }
                         }
                     }
                     out = Some(RawDerivation::Rule {

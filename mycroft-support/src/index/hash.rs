@@ -1,6 +1,6 @@
 //! `hash` provides a `HashIndex` over `storage` types - it only allows you to check presence or
 //! not, and if present, gets you the key.
-use std::hash::{Hash, Hasher, BuildHasher};
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::ops::Index;
 use std::marker::PhantomData;
 use std::collections::hash_map::RandomState;

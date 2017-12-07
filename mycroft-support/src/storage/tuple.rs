@@ -3,8 +3,10 @@
 //! functionality.
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::collections::btree_map;
+use std::collections::hash_map;
 use index::hash::{CheckIndex, HashIndex};
 use join::SkipIterator;
+use aggregator::Aggregator;
 
 type Tuple = Vec<usize>;
 
@@ -19,7 +21,7 @@ fn permute(perm: &[usize], tup: &[usize]) -> Tuple {
 /// A projection is an ordered view of a tuple store, under a specific permutation.
 pub struct Projection {
     perm: Vec<usize>,
-    inner: BTreeMap<Tuple, usize>,
+    inner: BTreeMap<Tuple, Vec<usize>>,
 }
 
 impl Projection {
@@ -37,8 +39,11 @@ impl Projection {
             inner: out_inner,
         }
     }
-    fn insert(&mut self, tup: &[usize], fid: usize) {
-        self.inner.insert(permute(&self.perm, &tup), fid);
+    fn insert(&mut self, tup: &[usize], fids: Vec<usize>) {
+        self.inner.insert(permute(&self.perm, &tup), fids);
+    }
+    fn remove(&mut self, tup: &[usize]) {
+        self.inner.remove(&permute(&self.perm, &tup));
     }
     fn arity(&self) -> usize {
         self.perm.len()
@@ -58,15 +63,15 @@ impl Projection {
 /// Iterator over a projection implementing the `SkipIterator` interface
 pub struct ProjectionIter<'a> {
     proj: &'a Projection,
-    iter: btree_map::Range<'a, Tuple, usize>,
+    iter: btree_map::Range<'a, Tuple, Vec<usize>>,
 }
 
 impl<'a> SkipIterator for ProjectionIter<'a> {
     fn skip(&mut self, tup: Tuple) {
         self.iter = self.proj.inner.range(tup..);
     }
-    fn next(&mut self) -> Option<(usize, Tuple)> {
-        self.iter.next().map(|(v, k)| (*k, v.clone()))
+    fn next(&mut self) -> Option<(Tuple, Vec<usize>)> {
+        self.iter.next().map(|(t, f)| (t.clone(), f.clone()))
     }
     fn arity(&self) -> usize {
         self.proj.arity()
@@ -86,7 +91,7 @@ pub enum Provenance {
         /// Index of rule in alphabetical order
         rule_id: usize,
         /// Which facts were used - which tuplestore to look up from depends on the rule
-        premises: Vec<usize>,
+        premises: Vec<Vec<usize>>,
     },
 }
 
@@ -98,6 +103,10 @@ pub enum Provenance {
 pub struct Tuples {
     inner: Vec<Tuple>,
     index: HashIndex<[usize]>,
+    agg_map: HashMap<Vec<usize>, (Vec<usize>, Vec<usize>)>,
+    agg_indices: Vec<usize>,
+    key_indices: Vec<usize>,
+    aggs: Vec<Box<Aggregator + 'static>>,
     projections: HashMap<Vec<usize>, Projection>,
     mailboxes: Vec<Projection>,
     provenance: Vec<BTreeSet<Provenance>>,
@@ -174,7 +183,7 @@ impl Tuples {
         }
         let mut projection = Projection::new(fields);
         for i in 0..self.len() {
-            projection.insert(&self.get_unchecked(i), i)
+            projection.insert(&self.get_unchecked(i), vec![i])
         }
         self.projections
             .insert(fields.iter().cloned().collect(), projection);
@@ -189,24 +198,44 @@ impl Tuples {
         // TODO: dedup between this and register_projection
         let mut projection = Projection::new(fields);
         for i in 0..self.len() {
-            projection.insert(&self.get_unchecked(i), i)
+            projection.insert(&self.get_unchecked(i), vec![i])
         }
         self.mailboxes.push(projection);
         self.mailboxes.len() - 1
     }
     /// Constructs a new `Tuples` tuplestore of the provided arity.
-    pub fn new(arity: usize) -> Self {
+    pub fn new(m_aggs: Vec<Option<Box<Aggregator + 'static>>>) -> Self {
+        let arity = m_aggs.len();
         assert!(arity > 0);
         let mut inner = Vec::new();
         for _ in 0..arity {
             inner.push(Vec::new());
         }
+
+        let mut agg_indices = Vec::new();
+        let mut key_indices = Vec::new();
+        let mut aggs = Vec::new();
+
+        for (i, m_agg) in m_aggs.into_iter().enumerate() {
+            match m_agg {
+                Some(agg) => {
+                    agg_indices.push(i);
+                    aggs.push(agg);
+                }
+                None => key_indices.push(i),
+            }
+        }
+
         Tuples {
             inner: inner,
             index: HashIndex::new(),
             projections: HashMap::new(),
             mailboxes: Vec::new(),
             provenance: Vec::new(),
+            aggs: aggs,
+            agg_map: HashMap::new(),
+            agg_indices: agg_indices,
+            key_indices: key_indices,
         }
     }
     /// Returns the arity of the tuples stored
@@ -260,11 +289,56 @@ impl Tuples {
                 for (col, new_val) in self.inner.iter_mut().zip(val.into_iter()) {
                     col.push(*new_val)
                 }
-                for proj in self.projections.values_mut() {
-                    proj.insert(val, key)
-                }
-                for mailbox in self.mailboxes.iter_mut() {
-                    mailbox.insert(val, key)
+
+                let key_tuple = permute(&self.key_indices, &val);
+                let agg_tuple = permute(&self.agg_indices, &val);
+
+                let (updated, agg_done, old) = match self.agg_map.entry(key_tuple) {
+                    hash_map::Entry::Occupied(mut oe) => {
+                        let old = oe.get().0.clone();
+                        for (i, agg_elem) in agg_tuple.iter().enumerate() {
+                            oe.get_mut().0[i] = self.aggs[i].aggregate(oe.get().0[i], *agg_elem)
+                        }
+                        oe.get_mut().1.push(key);
+                        let new = oe.get().clone();
+                        (old != new.0, new, Some(old))
+                    }
+                    hash_map::Entry::Vacant(ve) => {
+                        let out = (agg_tuple.clone(), vec![key]);
+                        ve.insert(out.clone());
+                        (true, out, None)
+                    }
+                };
+
+                if updated {
+                    let mut done_tuple = val.to_vec();
+                    for (i, agg_idx) in self.agg_indices.iter().enumerate() {
+                        done_tuple[*agg_idx] = agg_done.0[i];
+                    }
+
+                    match old {
+                        Some(old_agg) => {
+                            let mut old_tup = val.to_vec();
+                            for (i, agg_idx) in self.agg_indices.iter().enumerate() {
+                                old_tup[*agg_idx] = old_agg[i]
+                            }
+
+                            for proj in self.projections.values_mut() {
+                                proj.remove(&old_tup)
+                            }
+                            for mailbox in self.mailboxes.iter_mut() {
+                                mailbox.remove(&old_tup)
+                            }
+                        }
+                        None => (),
+                    }
+
+                    for proj in self.projections.values_mut() {
+                        proj.insert(&done_tuple, agg_done.1.clone())
+                    }
+                    for mailbox in self.mailboxes.iter_mut() {
+                        mailbox.insert(&done_tuple, agg_done.1.clone())
+                    }
                 }
                 (key, true)
             }

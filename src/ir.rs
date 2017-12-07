@@ -205,9 +205,7 @@ fn find_var(hay: &[String], needle: &str) -> Result<usize> {
             return Ok(idx);
         }
     }
-    Err(
-        ErrorKind::VarNotFound(hay.to_vec(), needle.to_string()).into(),
-    )
+    Err(ErrorKind::VarNotFound(hay.to_vec(), needle.to_string()).into())
 }
 
 impl Rule {
@@ -243,13 +241,11 @@ impl Rule {
                     match find_var(&query.vars, v).chain_err(|| "Head clause var lookup") {
                         Ok(var) => {
                             if query.types[v] != pred.types[head_field] {
-                                return Err(
-                                    ErrorKind::HeadTypeMismatch(
-                                        Box::new(ast),
-                                        v.clone(),
-                                        query.types[v].clone(),
-                                    ).into(),
-                                );
+                                return Err(ErrorKind::HeadTypeMismatch(
+                                    Box::new(ast),
+                                    v.clone(),
+                                    query.types[v].clone(),
+                                ).into());
                             }
                             MatchVal::Var(var)
                         }
@@ -291,9 +287,7 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
                 return Err(ErrorKind::MatchStyle(Box::new(pred.clone())).into());
             }
             if v.len() != pred.types.len() {
-                return Err(
-                    ErrorKind::ShortClause(Box::new(pred.clone()), v.len()).into(),
-                );
+                return Err(ErrorKind::ShortClause(Box::new(pred.clone()), v.len()).into());
             }
             Ok(v.iter().cloned().enumerate().collect())
         }
@@ -305,9 +299,7 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
             let mut out = Vec::new();
             for &ast::NamedField { ref name, ref val } in nm.iter() {
                 if seen_fields.contains(name) {
-                    return Err(
-                        ErrorKind::DoubleBind(Box::new(pred.clone()), name.clone()).into(),
-                    );
+                    return Err(ErrorKind::DoubleBind(Box::new(pred.clone()), name.clone()).into());
                 }
                 seen_fields.insert(name.clone());
                 // This ugly bit of code just finds the index of the name present in the named
@@ -364,10 +356,10 @@ impl Query {
         let mut var_map = BTreeMap::new();
         for (idx, clause) in ast.clauses.clone().iter().enumerate() {
             if !preds.contains_key(&clause.pred_name) {
-                return Err(
-                    ErrorKind::QueryUndefinedPredicate(Box::new(ast), clause.pred_name.clone())
-                        .into(),
-                );
+                return Err(ErrorKind::QueryUndefinedPredicate(
+                    Box::new(ast),
+                    clause.pred_name.clone(),
+                ).into());
             }
             predicates.push(clause.pred_name.clone());
             let pred = &preds[&clause.pred_name];
@@ -385,14 +377,12 @@ impl Query {
                         }
                         let var_type = types.entry(s.clone()).or_insert_with(|| qf_type.clone());
                         if qf_type != var_type {
-                            return Err(
-                                ErrorKind::QueryTypeMismatch(
-                                    Box::new(ast),
-                                    s.clone(),
-                                    var_type.clone(),
-                                    qf_type.clone(),
-                                ).into(),
-                            );
+                            return Err(ErrorKind::QueryTypeMismatch(
+                                Box::new(ast),
+                                s.clone(),
+                                var_type.clone(),
+                                qf_type.clone(),
+                            ).into());
                         }
                         pre_unify.entry(s.clone()).or_insert_with(Vec::new).push(qf);
                     }
@@ -417,6 +407,7 @@ impl Query {
                 pre_gao.push(qf.clone());
             }
         }
+
         // Flatten to permutations
         let mut gao = Vec::new();
         for i in 0..predicates.len() {
@@ -510,9 +501,7 @@ impl Program {
             if queries.contains_key(&ir_query.name) {
                 let first = queries.remove(&ir_query.name).unwrap().ast;
                 let second = ir_query.ast;
-                return Err(
-                    ErrorKind::QueryDefinedTwice(Box::new(first), Box::new(second)).into(),
-                );
+                return Err(ErrorKind::QueryDefinedTwice(Box::new(first), Box::new(second)).into());
             }
             queries.insert(ir_query.name.clone(), ir_query);
         }
@@ -523,9 +512,7 @@ impl Program {
             if rules.contains_key(&ir_rule.name) {
                 let first = rules.remove(&ir_rule.name).unwrap().ast;
                 let second = ir_rule.ast;
-                return Err(
-                    ErrorKind::RuleDefinedTwice(Box::new(first), Box::new(second)).into(),
-                );
+                return Err(ErrorKind::RuleDefinedTwice(Box::new(first), Box::new(second)).into());
             }
             rules.insert(ir_rule.name.clone(), ir_rule);
         }

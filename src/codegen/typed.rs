@@ -6,7 +6,7 @@ pub fn is_small(type_: &str) -> bool {
     match type_ {
         //TODO remove u64 from this list on 32-bit systems
         //TODO make list extensible by user programs
-        "usize" | "u64" | "u32" | "u16" | "u8" | "i64" | "i32" | "i16" | "i8" => true,
+        "usize" | "u64" | "u32" | "u16" | "u8" | "i64" | "i32" | "i16" | "i8" | "bool" => true,
         _ => false,
     }
 }
@@ -15,7 +15,11 @@ pub fn is_small(type_: &str) -> bool {
 // the variable 'tuple', and the database in the variable 'db'
 pub fn load(type_: &str, index: usize) -> quote::Tokens {
     let index_lit = Lit::Int(index as u64, IntTy::Usize);
-    if is_small(type_) {
+    if type_ == "bool" {
+        quote! {
+            tuple[#index_lit] == 1
+        }
+    } else if is_small(type_) {
         let out_type = Ident::new(type_.to_string());
         quote! {
             tuple[#index_lit] as #out_type

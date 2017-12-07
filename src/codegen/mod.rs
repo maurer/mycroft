@@ -125,6 +125,8 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         .map(|x| typed::name(x))
         .collect::<Vec<_>>();
     let data_type_names2 = data_type_names.clone();
+    let data_type_names3 = data_type_names.clone();
+    let data_type_names4 = data_type_names.clone();
 
     let type_names = type_set
         .into_iter()
@@ -142,7 +144,36 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     let arities = prog.predicates
         .values()
-        .map(|pred| Lit::Int(pred.types.len() as u64, IntTy::Usize))
+        .map(|pred| {
+            let mut build_aggs = Vec::new();
+            for (idx, agg) in pred.aggs.iter().enumerate() {
+                match agg {
+                    &Some(ref agg_func) => {
+                        let agg_name = Ident::new(agg_func.to_string());
+                        let type_ = &pred.types[idx];
+                        if typed::is_small(type_) {
+                            build_aggs.push(quote! {
+                                aggs.push(Some(Box::new(::mycroft_support::aggregator::Func::new(#agg_name))))
+                            })
+                        } else {
+                            let data = typed::name(type_);
+                            build_aggs.push(quote! {
+                                aggs.push(Some(Box::new(::mycroft_support::aggregator::FuncData::new(#agg_name, #data.clone()))))
+                            })
+                        }
+                    }
+                    &None => build_aggs.push(quote! { aggs.push(None) }),
+                }
+            }
+            quote! {
+                {
+                    use mycroft_support::aggregator::Aggregator;
+                    let mut aggs: Vec<Option<Box<Aggregator>>> = Vec::new();
+                    #(#build_aggs;)*
+                    aggs
+                }
+            }
+        })
         .collect::<Vec<_>>();
 
     // Map from constant name to constant type
@@ -250,9 +281,10 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             }
             impl Database {
                 pub fn new() -> Self {
+                    #(let #data_type_names2 = Data::new();)*
                     let mut db = Self {
                         #(#pred_names2: Tuples::new(#arities),)*
-                        #(#data_type_names2: Data::new(),)*
+                        #(#data_type_names3: #data_type_names4,)*
                         #(#query_storage_names2: QueryStorage::default(),)*
                         #(#k_names2: ::std::usize::MAX,)*
                     };
@@ -268,7 +300,6 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     }
                 }
                 fn raw_derivation(&self, fact: &Fact) -> RawDerivation {
-                    println!("Raw derivation of {:?}", fact);
                     RawDerivation::from_storage(fact, &|key| self.tuple_by_id(key),
                        &rule_slot_to_pred, HashSet::new(), 2).expect("No valid derivation for fact?")
                 }

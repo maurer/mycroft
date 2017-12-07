@@ -147,7 +147,7 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
         pub fn #rule_invoke_name(&mut self) -> Vec<Fact> {
             let mut productive = Vec::new();
             let tuples = self.#query_incr_tuple_name();
-            for (fids, tuple) in tuples {
+            for (tuple, fids) in tuples {
                 let p = Provenance::Rule {
                     rule_id: #rule_id_k,
                     premises: fids

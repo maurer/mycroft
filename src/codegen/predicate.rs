@@ -5,6 +5,7 @@ use ir;
 use syn::{Ident, IntTy, Lit};
 use quote;
 use super::typed;
+use std::collections::BTreeMap;
 
 pub mod names {
     use ir;
@@ -79,7 +80,20 @@ pub fn fact(pred_id: usize, pred: &ir::Predicate) -> quote::Tokens {
         .enumerate()
         .map(|(idx, type_)| typed::load(type_, idx))
         .collect::<Vec<_>>();
-
+    //TODO dedup release generation
+    let mut type_counts = BTreeMap::new();
+    for type_ in pred.types.iter() {
+        if !typed::is_small(type_) {
+            *type_counts.entry(type_.to_string()).or_insert(0usize) += 1;
+        }
+    }
+    let mut type_releases = Vec::new();
+    for (type_, count) in type_counts {
+        let data_name = typed::name(&type_);
+        type_releases.push(quote! {
+            db.#data_name.read_exit(#count);
+        });
+    }
     quote! {
         const #pred_id_name: usize = #pred_id_k;
         #[derive(Debug)]
@@ -88,9 +102,13 @@ pub fn fact(pred_id: usize, pred: &ir::Predicate) -> quote::Tokens {
         }
         impl #fact_name2 {
             fn from_tuple(db: &Database, tuple: &[usize]) -> Self {
-                Self {
+                let out = Self {
                     #(#field_names2: (#type_loads).clone()),*
+                };
+                unsafe {
+                    #(#type_releases;)*
                 }
+                out
             }
             fn to_tuple(self, db: &mut Database) -> [usize; #arity] {
                 let mut out = [0; #arity2];

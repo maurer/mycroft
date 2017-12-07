@@ -40,12 +40,6 @@ pub mod names {
         Ident::new(format!("{}View", camelize(name)))
     }
 
-    // Name of the phantom to deal with empty borrows
-    pub fn borrow_phantom(_query: &ir::Query) -> Ident {
-        // TODO: Use query to engage in name collision avoidance
-        Ident::new("mycroft_internal_phantom".to_string())
-    }
-
     // Name of the tuple storages needed for this query
     pub fn tuples(query: &ir::Query) -> Vec<Ident> {
         query
@@ -179,11 +173,18 @@ fn restricts(query: &ir::Query) -> quote::Tokens {
 
 // Generates the structs + from_tuple for our result types
 fn decls(query: &ir::Query) -> quote::Tokens {
+    // TODO result_borrow is not fully enforcing the rules it should - if you deconstruct the
+    // result_borrow, taking its fields, and then release it, you can have invalid references.
+    // This can be fixed by making field access be done through functions, but:
+    // 1.) That's slower
+    // 2.) This isn't intended as a public interface, so just don't throw away your Views
+    //   internally and we'll be fine for now.
     let result = names::result(query);
     let result2 = result.clone();
 
     let result_borrow = names::result_borrow(&query.name);
     let result_borrow2 = result_borrow.clone();
+    let result_borrow3 = result_borrow.clone();
 
     let mut vars = Vec::new();
     let mut types = Vec::new();
@@ -197,14 +198,12 @@ fn decls(query: &ir::Query) -> quote::Tokens {
     let vars2 = vars.clone();
     let vars3 = vars.clone();
     let loads2 = loads.clone();
-    // Phantom is needed here for query results with an empty variable list
-    let borrow_phantom = names::borrow_phantom(query);
-    let borrow_phantom2 = borrow_phantom.clone();
     // Need to split into big/small vars/types to avoid &u64 and similar
     let mut big_vars = Vec::new();
     let mut small_vars = Vec::new();
     let mut big_types = Vec::new();
     let mut small_types = Vec::new();
+    let mut type_counts = BTreeMap::new();
     for var in &query.vars {
         let type_ = &query.types[var];
         let var_name = Ident::new(var.clone());
@@ -213,32 +212,55 @@ fn decls(query: &ir::Query) -> quote::Tokens {
             small_vars.push(var_name);
             small_types.push(type_name);
         } else {
+            *type_counts.entry(type_.to_string()).or_insert(0usize) += 1;
             big_vars.push(var_name);
             big_types.push(type_name);
         }
     }
+
+    let mut type_releases = Vec::new();
+    for (type_, count) in type_counts {
+        let data_name = typed::name(&type_);
+        type_releases.push(quote! {
+            db.#data_name.read_exit(#count);
+        });
+    }
+    let type_releases2 = type_releases.clone();
+
     quote! {
         pub struct #result {
             #(pub #vars: #types),*
         }
         impl #result2 {
             fn from_tuple(db: &Database, tuple: Vec<usize>) -> Self {
-                Self {
+                let out = Self {
                     #(#vars2: (#loads).clone()),*
+                };
+                unsafe {
+                    #(#type_releases;)*
                 }
+                out
             }
         }
 
         pub struct #result_borrow<'a> {
             #(pub #big_vars: &'a #big_types,)*
             #(pub #small_vars: #small_types,)*
-            #borrow_phantom: ::std::marker::PhantomData<&'a ()>
+            db: &'a Database,
         }
         impl<'a> #result_borrow2<'a> {
             fn from_tuple(db: &'a Database, tuple: Vec<usize>) -> Self {
                 Self {
                     #(#vars3: #loads2,)*
-                    #borrow_phantom2: ::std::marker::PhantomData
+                    db: db
+                }
+            }
+        }
+        impl<'a> Drop for #result_borrow3<'a> {
+            fn drop (&mut self) {
+                let db = &self.db;
+                unsafe {
+                    #(#type_releases2;)*
                 }
             }
         }

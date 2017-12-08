@@ -3,7 +3,7 @@ mod printers;
 
 /// A `Program` contains all parts of a Mycroft program, and is the basic
 /// unit to be handed to the code generator.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Program {
     /// The list of predicate definitions, defining the different kinds of
     /// facts that may be stored in the database.

@@ -7,6 +7,19 @@ use combine::{any, between, many, not_followed_by, optional, parser, skip_many, 
 use combine::char::{char, digit, letter, newline, spaces, string};
 use combine::primitives::{Consumed, Stream};
 
+/// This is not for general use, it's public due to a quirk of the parser! macro
+/// `AnyStmt` is a wrapper type around all AST statements to allow parsing in arbitrary orders.
+/// This allows people to put predicates in the files which interact with them rather than globally
+/// at the top.
+pub enum AnyStmt {
+    /// Predicate statement
+    Predicate(Predicate),
+    /// Rule statement
+    Rule(Rule),
+    /// Query statement
+    Query(Query),
+}
+
 parser! {
     fn comment[I]()(I) -> ()
         where [I: Stream<Item=char>] {
@@ -236,6 +249,47 @@ parser! {
 }
 
 parser! {
+    fn pred_any[I]()(I) -> AnyStmt
+        where [I: Stream<Item=char>] {
+            predicate().map(AnyStmt::Predicate)
+    }
+}
+
+parser! {
+    fn rule_any[I]()(I) -> AnyStmt
+        where [I: Stream<Item=char>] {
+            rule().map(AnyStmt::Rule)
+    }
+}
+
+parser! {
+    fn query_any[I]()(I) -> AnyStmt
+        where [I: Stream<Item=char>] {
+            query().map(AnyStmt::Query)
+    }
+}
+
+parser! {
+    fn any_stmt[I]()(I) -> AnyStmt
+        where [I: Stream<Item=char>] {
+        try(skip_many(comment())).with(query_any().or(try(pred_any())).or(rule_any()))
+    }
+}
+
+fn anys_to_prog(stmts: Vec<AnyStmt>) -> Program {
+    use self::AnyStmt::*;
+    let mut prog = Program::default();
+    for stmt in stmts {
+        match stmt {
+            Query(q) => prog.queries.push(q),
+            Predicate(p) => prog.predicates.push(p),
+            Rule(r) => prog.rules.push(r),
+        }
+    }
+    prog
+}
+
+parser! {
 /// `program` will return a combine parser constructor that will parse legal Mycroft programs.
 /// To parse with it:
 /// ```
@@ -251,16 +305,7 @@ parser! {
 /// combine error if not. Errors may be poor quality until 1.0.
     pub fn program[I]()(I) -> Program
         where [I: Stream<Item=char>] {
-        (spaces(),
-        many(try(skip_many(comment()).with(predicate()))),
-        many(try(skip_many(comment()).with(query()))),
-        many(try(skip_many(comment()).with(rule()))),
-        skip_many(comment()))
-            .map(|ps| Program {
-                predicates: ps.1,
-                queries: ps.2,
-                rules: ps.3,
-            })
+        spaces().with(many(any_stmt())).skip(skip_many(comment())).map(anys_to_prog)
     }
 }
 
@@ -562,5 +607,23 @@ mod test {
             ],
         };
         assert_eq!(Ok((prog, "")), program().parse(prog_code));
+    }
+
+    // Reordered statements parse
+    #[test]
+    fn reordered() {
+        let prog_code = r#"
+            bar(bang)
+            // Between modes
+            ?bars: bar(x)
+            foo: bar(baz) <- bang(bash)
+            ?wibble: baz(q)
+            boom(bang)
+            foo: dumdum(q) <- ~wobble(bing)
+        "#;
+        match program().parse(prog_code) {
+            Ok((_, "")) => (),
+            e => panic!("{:?}", e),
+        }
     }
 }

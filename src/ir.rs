@@ -164,6 +164,8 @@ pub struct Query {
     pub matches: Vec<Vec<Option<MatchVal>>>,
     /// Map between variables and their types
     pub types: BTreeMap<String, String>,
+    /// Whether a given clause is being circumscribed
+    pub circumscribed: Vec<bool>,
     /// For each predicate, how it should be projected in the ordering
     pub gao: Vec<Vec<usize>>,
 }
@@ -354,6 +356,7 @@ impl Query {
         let mut pre_eq = Vec::new();
         let mut vars = Vec::new();
         let mut var_map = BTreeMap::new();
+        let mut circumscribed = Vec::new();
         for (idx, clause) in ast.clauses.clone().iter().enumerate() {
             if !preds.contains_key(&clause.pred_name) {
                 return Err(ErrorKind::QueryUndefinedPredicate(
@@ -362,6 +365,7 @@ impl Query {
                 ).into());
             }
             predicates.push(clause.pred_name.clone());
+            circumscribed.push(clause.circumscribed);
             let pred = &preds[&clause.pred_name];
             for (var_idx, match_) in idx_form(pred, &clause.matches)? {
                 let qf = QueryField {
@@ -461,6 +465,7 @@ impl Query {
             predicates: predicates,
             vars: vars,
             matches: matches,
+            circumscribed: circumscribed,
             types: types,
             gao: gao,
         })

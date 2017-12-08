@@ -92,6 +92,7 @@ pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
 
 pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
     let pred_id_k = predicate::names::id(&rule.head_pred);
+    let pred_id_k2 = pred_id_k.clone();
     let tuple_subs: Vec<quote::Tokens> = rule.head_vals
         .iter()
         .map(|hv| match *hv {
@@ -109,6 +110,33 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
     let tuple_name = predicate::names::tuple(&rule.head_pred);
     let query_incr_tuple_name = query::names::incr_tuple(&rule.body_query);
 
+    let post_tuple = quote! {
+        if new {
+            let fact = Fact {
+                predicate_id: #pred_id_k,
+                fact_id: fid
+            };
+            if let Provenance::Rule {premises, rule_id} = p.clone() {
+                for (col, premise) in premises.into_iter().enumerate() {
+                    let pred_id = rule_slot_to_pred(rule_id, col);
+                    match premise {
+                        MergeRef::FactIds(fids) => {
+                            for fid in fids {
+                                self.fidfids.entry(Fact {
+                                    predicate_id: pred_id,
+                                    fact_id: fid
+                                }).or_insert(Vec::new()).push(fact.clone());
+                            }
+                        }
+                        MergeRef::MetaId(mid) => self.midfids.entry((pred_id, mid)).or_insert(Vec::new()).push(fact.clone())
+                    }
+                }
+            }
+            productive.push(fact);
+        }
+        self.purge_mid(#pred_id_k2, broke, fid);
+    };
+
     let tuple_action = match rule.func {
         Some(ref name) => {
             let func = Ident::new(name.clone());
@@ -118,25 +146,15 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
                 for extra_vars in func_out {
                     let mut tuple = tuple.clone();
                     tuple.extend(&extra_vars.to_tuple(self));
-                    let (fid, new) = self.#tuple_name.insert(&[#(#tuple_subs),*], p.clone());
-                    if new {
-                        productive.push(Fact {
-                            predicate_id: #pred_id_k,
-                            fact_id: fid
-                        })
-                    }
-                }
+                    let (fid, new, broke) = self.#tuple_name.insert(&[#(#tuple_subs),*], p.clone());
+                    #post_tuple
+               }
             }
         }
         None => {
             quote! {
-                let (fid, new) = self.#tuple_name.insert(&[#(#tuple_subs),*], p);
-                if new {
-                    productive.push(Fact {
-                            predicate_id: #pred_id_k,
-                            fact_id: fid
-                    })
-                }
+                let (fid, new, broke) = self.#tuple_name.insert(&[#(#tuple_subs),*], p.clone());
+                #post_tuple
             }
         }
     };

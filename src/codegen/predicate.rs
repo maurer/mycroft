@@ -124,10 +124,13 @@ pub fn insert(pred: &ir::Predicate) -> quote::Tokens {
     let insert_name = names::insert(pred);
     let fact_name = names::fact(pred);
     let tuple_name = names::tuple(&pred.name);
+    let pid = names::id(&pred.name);
     quote! {
         pub fn #insert_name(&mut self, fact: #fact_name) -> usize {
             let tuple = fact.to_tuple(self);
-            self.#tuple_name.insert(&tuple, Provenance::Base).0
+            let res = self.#tuple_name.insert(&tuple, Provenance::Base);
+            self.purge_mid(#pid, res.2, res.0);
+            res.0
         }
     }
 }

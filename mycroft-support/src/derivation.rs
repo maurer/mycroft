@@ -1,6 +1,6 @@
 //! `derivation` handles operations related to walking the provenance graph
 use std::collections::HashSet;
-use storage::tuple::Provenance;
+use storage::tuple::{MergeRef, Provenance};
 
 /// Abstract fact, pre-projection
 /// Projected facts are handled in the codegen due to their type depending on the contents of the
@@ -80,11 +80,16 @@ impl RawDerivation {
                 } => {
                     let mut sub_out = Vec::new();
                     let mut local_depth = 0;
-                    for (col, premises) in premises.iter().enumerate() {
-                        for premise in premises {
+                    for (col, merge_ref) in premises.iter().enumerate() {
+                        let pred_id = rule_func(rule_id, col);
+                        let fids = match *merge_ref {
+                            MergeRef::MetaId(mid) => tuple_func(pred_id).get_meta(mid),
+                            MergeRef::FactIds(ref fids) => fids.clone(),
+                        };
+                        for premise in fids {
                             let sub_fact = Fact {
-                                predicate_id: rule_func(rule_id, col),
-                                fact_id: *premise,
+                                predicate_id: pred_id,
+                                fact_id: premise,
                             };
                             // If the provenance is circular, ignore it
                             if spine.contains(&sub_fact) {

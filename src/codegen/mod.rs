@@ -85,6 +85,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         .collect::<Vec<_>>();
     let pred_names2 = pred_names.clone();
     let pred_names3 = pred_names.clone();
+    let pred_names4 = pred_names.clone();
 
     let pred_ids = pred_names
         .iter()
@@ -92,6 +93,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         .map(|(pid, _)| Lit::Int(pid as u64, IntTy::Usize))
         .collect::<Vec<_>>();
     let pred_ids2 = pred_ids.clone();
+    let pred_ids3 = pred_ids.clone();
 
     let mut pred_name_to_id: BTreeMap<&str, usize> = BTreeMap::new();
     for (pid, name) in prog.predicates.keys().enumerate() {
@@ -239,10 +241,10 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     quote! {
        mod mycroft_program {
             #![allow(unused_imports,dead_code,unused_variables,unused_mut,unused_unsafe)]
-            use mycroft_support::storage::{Tuples, Data, Provenance};
+            use mycroft_support::storage::{Tuples, Data, Provenance, MergeRef};
             use mycroft_support::join::{Join, SkipIterator, Field, Restrict};
             use mycroft_support::derivation::{Derivation, RawDerivation, Fact};
-            use std::collections::HashSet;
+            use std::collections::{HashMap, HashSet};
             #[derive(Default)]
             struct QueryStorage {
                 mailboxes: Vec<usize>,
@@ -253,6 +255,8 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                 #(#data_type_names: Data<#type_names>,)*
                 #(#query_storage_names: QueryStorage,)*
                 #(#k_names: usize,)*
+                fidfids: HashMap<Fact, Vec<Fact>>,
+                midfids: HashMap<(usize, usize), Vec<Fact>>,
             }
             #(#pred_fact_decls)*
             #(#query_structs)*
@@ -287,15 +291,58 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                         #(#data_type_names3: #data_type_names4,)*
                         #(#query_storage_names2: QueryStorage::default(),)*
                         #(#k_names2: ::std::usize::MAX,)*
+                        fidfids: HashMap::new(),
+                        midfids: HashMap::new(),
                     };
                     // Constants must be initialized first, they are used in other initialization
                     #(#k_inits)*
                     #(#query_registrations)*
                     db
                 }
+                fn purge_mid(&mut self, base_pred_id: usize, m_mid: Option<usize>, cycle_fid: usize) {
+                    let mut mids: Vec<_> = m_mid.into_iter().map(|x| (base_pred_id, x)).collect();
+                    let mut fids = Vec::new();
+                    while !mids.is_empty() || !fids.is_empty() {
+                        while !mids.is_empty() {
+                            let (pred_id, mid) = mids.pop().unwrap();
+                            if let Some(influenced) = self.midfids.remove(&(pred_id, mid)) {
+                                for target in influenced {
+                                    let (mfid, mmid) = self.tuple_by_id_mut(target.predicate_id).purge_mid_prov(target.fact_id, pred_id, mid, rule_slot_to_pred);
+                                    if let Some(new_mid) = mmid {
+                                        mids.push((target.predicate_id, new_mid));
+                                    }
+                                    if let Some(new_fid) = mfid {
+                                        fids.push((target.predicate_id, new_fid));
+                                    }
+                                }
+                            }
+                        }
+                        while !fids.is_empty() {
+                            let (pred_id, fid) = fids.pop().unwrap();
+                            assert_ne!((pred_id, fid), (base_pred_id, cycle_fid));
+                            if let Some(influenced) = self.fidfids.remove(&Fact {predicate_id: pred_id, fact_id: fid}) {
+                                for target in influenced {
+                                    let (mfid, mmid) = self.tuple_by_id_mut(target.predicate_id).purge_fid_prov(target.fact_id, pred_id, fid, rule_slot_to_pred);
+                                    if let Some(new_mid) = mmid {
+                                        mids.push((target.predicate_id, new_mid));
+                                    }
+                                    if let Some(new_fid) = mfid {
+                                        fids.push((target.predicate_id, new_fid));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 fn tuple_by_id(&self, key: usize) -> &Tuples {
                     match key {
                         #(#pred_ids => &self.#pred_names3,)*
+                        _ => panic!("Internal error, unbound predicate ID")
+                    }
+                }
+                fn tuple_by_id_mut(&mut self, key: usize) -> &mut Tuples {
+                    match key {
+                        #(#pred_ids3 => &mut self.#pred_names4,)*
                         _ => panic!("Internal error, unbound predicate ID")
                     }
                 }

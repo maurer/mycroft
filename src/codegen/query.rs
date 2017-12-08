@@ -430,12 +430,40 @@ fn gen_incr(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
     let first_subjoin = subjoin_names[0].clone();
     let rest_subjoin = subjoin_names.into_iter().skip(1).collect::<Vec<_>>();
 
+    let prov_convs: Vec<_> = query
+        .circumscribed
+        .iter()
+        .enumerate()
+        .map(|(idx, c)| {
+            if *c {
+                let pred_tuples = predicate::names::tuple(&query.predicates[idx]);
+                quote! {
+                    new_prov.push(MergeRef::MetaId(self.#pred_tuples.make_meta(&prov[#idx])));
+                }
+            } else {
+                quote! {
+                    new_prov.push(MergeRef::FactIds(prov[#idx].clone()));
+                }
+            }
+        })
+        .collect();
+
     (
         quote! {
-            fn #query_incr_tuple_name(&mut self) -> Vec<(Vec<usize>, Vec<Vec<usize>>)> {
-                #build_all_subjoins
-                #first_subjoin#(.chain(#rest_subjoin))*
+            fn #query_incr_tuple_name(&mut self) -> Vec<(Vec<usize>, Vec<MergeRef>)> {
+                let out_vec: Vec<_> = {
+                    #build_all_subjoins
+                    #first_subjoin#(.chain(#rest_subjoin))*
+                    .collect()
+                };
+                out_vec.into_iter()
+                .map(|(tup, prov)| {
+                    let mut new_prov = Vec::new();
+                    #(#prov_convs;)*
+                    (tup, new_prov)
+                })
                 .collect()
+
             }
             pub fn #query_incr_func(&mut self) -> Vec<#query_result> {
                 self.#query_incr_tuple_name2().into_iter()

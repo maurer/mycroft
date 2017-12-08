@@ -81,6 +81,21 @@ impl<'a> SkipIterator for ProjectionIter<'a> {
     }
 }
 
+/// Key type for referencing a fact
+pub type FactId = usize;
+/// Key type for referencing a group of facts in an aggregate
+pub type MetaId = usize;
+
+/// Type for describing one of the two ways a merged result can be created - either as a simple
+/// aggregate using the `FactIds` constructor, or as a circumscribed aggregate using a `MetaId`
+#[derive(Ord, Eq, Debug, PartialOrd, PartialEq, Clone)]
+pub enum MergeRef {
+    /// Circumscribed fact grouping
+    MetaId(MetaId),
+    /// Aggregate fact grouping (singleton for non-aggregate)
+    FactIds(Vec<FactId>),
+}
+
 /// How we know a fact to be true
 #[derive(Ord, Eq, Debug, PartialOrd, PartialEq, Clone)]
 pub enum Provenance {
@@ -91,8 +106,53 @@ pub enum Provenance {
         /// Index of rule in alphabetical order
         rule_id: usize,
         /// Which facts were used - which tuplestore to look up from depends on the rule
-        premises: Vec<Vec<usize>>,
+        premises: Vec<MergeRef>,
     },
+}
+
+impl Provenance {
+    fn uses_fid<F: Fn(usize, usize) -> usize>(&self, pred_id: usize, fid: FactId, f: F) -> bool {
+        match *self {
+            Provenance::Base => false,
+            Provenance::Rule {
+                rule_id,
+                ref premises,
+            } => {
+                for (col, premise) in premises.iter().enumerate() {
+                    if f(rule_id, col) == pred_id {
+                        match *premise {
+                            MergeRef::MetaId(_) => continue,
+                            MergeRef::FactIds(ref fids) => if fids.contains(&fid) {
+                                return true;
+                            },
+                        }
+                    }
+                }
+                false
+            }
+        }
+    }
+    fn uses_mid<F: Fn(usize, usize) -> usize>(&self, pred_id: usize, mid: MetaId, f: F) -> bool {
+        match *self {
+            Provenance::Base => false,
+            Provenance::Rule {
+                rule_id,
+                ref premises,
+            } => {
+                for (col, premise) in premises.iter().enumerate() {
+                    if f(rule_id, col) == pred_id {
+                        match *premise {
+                            MergeRef::MetaId(mid2) => if mid == mid2 {
+                                return true;
+                            },
+                            MergeRef::FactIds(_) => continue,
+                        }
+                    }
+                }
+                false
+            }
+        }
+    }
 }
 
 /// In-memory Tuple store.
@@ -110,6 +170,8 @@ pub struct Tuples {
     projections: HashMap<Vec<usize>, Projection>,
     mailboxes: Vec<Projection>,
     provenance: Vec<BTreeSet<Provenance>>,
+    meta: Vec<Vec<FactId>>,
+    inv_meta: HashMap<Vec<FactId>, MetaId>,
 }
 
 struct Rows<'a> {
@@ -126,6 +188,14 @@ impl<'a> CheckIndex<[usize]> for Rows<'a> {
         }
         return true;
     }
+}
+
+fn get_unchecked(inner: &Vec<Vec<usize>>, key: FactId) -> Vec<usize> {
+    let mut out = Vec::new();
+    for col in inner {
+        out.push(col[key]);
+    }
+    out
 }
 
 impl Tuples {
@@ -145,11 +215,6 @@ impl Tuples {
         // This makes integrity() slow, so it must only be used inside debug_assert!
         if self.inner[0].len() != self.provenance.len() {
             return false;
-        }
-        for p in self.provenance.iter() {
-            if p.is_empty() {
-                return false;
-            }
         }
 
         return true;
@@ -183,7 +248,7 @@ impl Tuples {
         }
         let mut projection = Projection::new(fields);
         for i in 0..self.len() {
-            projection.insert(&self.get_unchecked(i), vec![i])
+            projection.insert(&self.get(i), vec![i])
         }
         self.projections
             .insert(fields.iter().cloned().collect(), projection);
@@ -198,7 +263,7 @@ impl Tuples {
         // TODO: dedup between this and register_projection
         let mut projection = Projection::new(fields);
         for i in 0..self.len() {
-            projection.insert(&self.get_unchecked(i), vec![i])
+            projection.insert(&self.get(i), vec![i])
         }
         self.mailboxes.push(projection);
         self.mailboxes.len() - 1
@@ -232,6 +297,8 @@ impl Tuples {
             projections: HashMap::new(),
             mailboxes: Vec::new(),
             provenance: Vec::new(),
+            meta: Vec::new(),
+            inv_meta: HashMap::new(),
             aggs: aggs,
             agg_map: HashMap::new(),
             agg_indices: agg_indices,
@@ -254,29 +321,131 @@ impl Tuples {
         debug_assert!(self.integrity());
         self.index.find(needle, &Rows { inner: &self.inner })
     }
-    fn get_unchecked(&self, key: usize) -> Vec<usize> {
-        let mut out = Vec::new();
-        for i in 0..self.arity() {
-            out.push(self.inner[i][key]);
-        }
-        out
-    }
     /// Get the fact referenced by the provided key
     pub fn get(&self, key: usize) -> Vec<usize> {
-        self.get_unchecked(key)
+        get_unchecked(&self.inner, key)
     }
     /// Return the set of ways this tuple was derived
     pub fn get_provenance(&self, key: usize) -> &BTreeSet<Provenance> {
         &self.provenance[key]
     }
+    /// Gets the list of fact IDs making up a particular meta-fact
+    pub fn get_meta(&self, mid: MetaId) -> Vec<FactId> {
+        self.meta[mid].clone()
+    }
+    /// Creates or references a `MetaId` for a circumscription over facts in this tuplestore
+    pub fn make_meta(&mut self, fids: &[FactId]) -> MetaId {
+        match self.inv_meta.entry(fids.to_vec()) {
+            hash_map::Entry::Occupied(oe) => *oe.get(),
+            hash_map::Entry::Vacant(ve) => {
+                let key = self.meta.len();
+                self.meta.push(fids.to_vec());
+                ve.insert(key);
+                key
+            }
+        }
+    }
+    /// Cleanses a fact's derivations of references to a MetaId
+    pub fn purge_mid_prov<F: Fn(usize, usize) -> usize>(
+        &mut self,
+        fid: FactId,
+        pred_id: usize,
+        dep_mid: MetaId,
+        f: F,
+    ) -> (Option<FactId>, Option<MetaId>) {
+        self.provenance[fid] = self.provenance[fid]
+            .iter()
+            .cloned()
+            .filter(|p| !p.uses_mid(pred_id, dep_mid, &f))
+            .collect();
+        if self.provenance[fid].is_empty() {
+            (Some(fid), self.purge(fid))
+        } else {
+            (None, None)
+        }
+    }
+    /// Cleanses a fact's derivations of references to a FactId
+    pub fn purge_fid_prov<F: Fn(usize, usize) -> usize>(
+        &mut self,
+        fid: FactId,
+        pred_id: usize,
+        dep_fid: FactId,
+        f: F,
+    ) -> (Option<FactId>, Option<MetaId>) {
+        self.provenance[fid] = self.provenance[fid]
+            .iter()
+            .cloned()
+            .filter(|p| !p.uses_fid(pred_id, dep_fid, &f))
+            .collect();
+        if self.provenance[fid].is_empty() {
+            (Some(fid), self.purge(fid))
+        } else {
+            (None, None)
+        }
+    }
+    /// Removes a tuple from all indices
+    /// Does not actually remove it from the tuple store, it'll just stop showing up in
+    /// projections. Returns a MetaId if it broke one
+    fn purge(&mut self, fid: FactId) -> Option<MetaId> {
+        let vals = self.get(fid);
+        let key_tuple = permute(&self.key_indices, &vals);
+        match self.agg_map.entry(key_tuple) {
+            hash_map::Entry::Occupied(mut oe) => {
+                assert!(oe.get().1.contains(&fid));
+                let old_fids = oe.get().1.clone();
+
+                let mut old_tup = oe.key().clone();
+                old_tup.extend(oe.get().0.clone());
+
+                for proj in self.projections.values_mut() {
+                    proj.remove(&old_tup)
+                }
+                for mailbox in self.mailboxes.iter_mut() {
+                    mailbox.remove(&old_tup)
+                }
+
+                oe.get_mut().1 = old_fids.clone().into_iter().filter(|x| *x != fid).collect();
+                if oe.get().1.is_empty() {
+                    oe.remove_entry();
+                } else {
+                    let mut agg_tup = permute(
+                        &self.agg_indices,
+                        &get_unchecked(&self.inner, oe.get().1[0]),
+                    );
+                    for fid in &oe.get().1[1..] {
+                        for (i, nagg) in
+                            permute(&self.agg_indices, &get_unchecked(&self.inner, *fid))
+                                .into_iter()
+                                .enumerate()
+                        {
+                            agg_tup[i] = self.aggs[i].aggregate(agg_tup[i], nagg);
+                        }
+                    }
+                    oe.get_mut().0 = agg_tup;
+
+                    let mut new_tup = oe.key().clone();
+                    new_tup.extend(oe.get().0.clone());
+                    for proj in self.projections.values_mut() {
+                        proj.insert(&new_tup, oe.get().1.clone())
+                    }
+                    for mailbox in self.mailboxes.iter_mut() {
+                        mailbox.insert(&new_tup, oe.get().1.clone())
+                    }
+                }
+                self.inv_meta.get(&old_fids).map(|x| x.clone())
+            }
+            hash_map::Entry::Vacant(_) => panic!("Purged a fact not in the aggmap"),
+        }
+    }
     /// Adds a new element to the tuple store.
     /// The arity of the provided value must equal the arity of the tuple store.
-    /// The returned value is a pair of the key, and whether the value was new (true for new).
-    pub fn insert(&mut self, val: &[usize], p: Provenance) -> (usize, bool) {
+    /// The returned value is a tuple of the key, whether the value was new (true for new),
+    /// and any MetaId that got broken by the insert
+    pub fn insert(&mut self, val: &[usize], p: Provenance) -> (FactId, bool, Option<MetaId>) {
         match self.find(&val) {
             Some(id) => {
                 self.provenance[id].insert(p);
-                (id, false)
+                (id, false, None)
             }
             None => {
                 assert_eq!(val.len(), self.arity());
@@ -293,20 +462,21 @@ impl Tuples {
                 let key_tuple = permute(&self.key_indices, &val);
                 let agg_tuple = permute(&self.agg_indices, &val);
 
-                let (updated, agg_done, old) = match self.agg_map.entry(key_tuple) {
+                let (updated, agg_done, old, mmid) = match self.agg_map.entry(key_tuple) {
                     hash_map::Entry::Occupied(mut oe) => {
                         let old = oe.get().0.clone();
                         for (i, agg_elem) in agg_tuple.iter().enumerate() {
                             oe.get_mut().0[i] = self.aggs[i].aggregate(oe.get().0[i], *agg_elem)
                         }
+                        let mmid = self.inv_meta.get(&oe.get().1).map(|x| *x);
                         oe.get_mut().1.push(key);
                         let new = oe.get().clone();
-                        (old != new.0, new, Some(old))
+                        (old != new.0, new, Some(old), mmid)
                     }
                     hash_map::Entry::Vacant(ve) => {
                         let out = (agg_tuple.clone(), vec![key]);
                         ve.insert(out.clone());
-                        (true, out, None)
+                        (true, out, None, None)
                     }
                 };
 
@@ -340,7 +510,7 @@ impl Tuples {
                         mailbox.insert(&done_tuple, agg_done.1.clone())
                     }
                 }
-                (key, true)
+                (key, true, mmid)
             }
         }
     }

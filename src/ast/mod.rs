@@ -78,6 +78,8 @@ pub struct Clause {
     pub pred_name: String,
     /// The restrictions over fields
     pub matches: Fields<Match>,
+    /// Whether or not this is a circumscribed clause
+    pub circumscribed: bool,
 }
 
 /// A `Match` is the specifier for how to unify a particular field

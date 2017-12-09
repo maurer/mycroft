@@ -207,7 +207,33 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     }
     let k_names2 = k_names.clone();
 
-    let rule_invokes: Vec<Ident> = prog.rules.values().map(rule::names::rule_invoke).collect();
+    let (meta_invokes, meta_defs) = {
+        let mut meta_rules: BTreeMap<Option<usize>, Vec<&ir::Rule>> = BTreeMap::new();
+        for rule in prog.rules.values() {
+            meta_rules
+                .entry(rule.stage)
+                .or_insert(Vec::new())
+                .push(rule)
+        }
+        let mut meta_names: Vec<Ident> = Vec::new();
+        let mut meta_defs: Vec<quote::Tokens> = Vec::new();
+        for (stage, rules) in meta_rules {
+            let name = match stage {
+                None => Ident::new("run_rules_default".to_string()),
+                Some(stage) => Ident::new(format!("run_rules_stage_{}", stage)),
+            };
+            meta_names.push(name.clone());
+            let rule_invokes: Vec<_> = rules.into_iter().map(rule::names::rule_invoke).collect();
+            meta_defs.push(quote!{
+                pub fn #name(&mut self) -> Vec<Fact> {
+                    let mut productive = Vec::new();
+                    #(productive.extend(&self.#rule_invokes());)*
+                    productive
+                }
+            });
+        }
+        (meta_names, meta_defs)
+    };
 
     let rule_decls = prog.rules
         .values()
@@ -362,9 +388,15 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     let raw = self.raw_derivation(fact);
                     Derivation::from_raw(raw, &|f| self.project_fact(f), &rule_id_to_name)
                 }
+                #(#meta_defs)*
                 pub fn run_rules_once(&mut self) -> Vec<Fact> {
                     let mut productive = Vec::new();
-                    #(productive.extend(&self.#rule_invokes());)*
+                    #({
+                        productive.extend(&self.#meta_invokes());
+                        if !productive.is_empty() {
+                            return productive
+                        }
+                    })*
                     productive
                 }
                 pub fn run_rules(&mut self) {

@@ -106,4 +106,6 @@ pub struct Rule {
     pub body: Vec<Clause>,
     /// Function to be called on bound body clause variables to produce head solutions
     pub func: Option<String>,
+    /// Stage to call this rule in
+    pub stage: Option<usize>,
 }

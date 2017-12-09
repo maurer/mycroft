@@ -199,6 +199,8 @@ pub struct Rule {
     pub func_vars: Vec<String>,
     /// List of types for the function variables
     pub func_types: Vec<String>,
+    /// Which stage to execute this rule in
+    pub stage: Option<usize>,
 }
 
 fn find_var(hay: &[String], needle: &str) -> Result<usize> {
@@ -268,6 +270,7 @@ impl Rule {
         }
         queries.insert(query_name.clone(), query);
         Ok(Rule {
+            stage: ast.stage,
             name: ast.name.clone(),
             func: ast.func.clone(),
             func_vars: func_vars,

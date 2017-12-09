@@ -3,7 +3,7 @@
 //! Provides parsing functions for the Mycroft language.
 use ast::*;
 use combine::{any, between, many, not_followed_by, optional, parser, skip_many, try, Parser,
-              sep_by1};
+              many1, sep_by1};
 use combine::char::{char, digit, letter, newline, spaces, string};
 use combine::primitives::{Consumed, Stream};
 
@@ -236,14 +236,16 @@ parser! {
     fn rule[I]()(I) -> Rule
         where [I: Stream<Item=char>] {
         let rule_name = ident();
+        let stage = optional((lex_char('@'), many1(digit())).map(|f: (_, String)| f.1.parse::<usize>().unwrap()));
         let rule_head = clause();
         let rule_body = sep_by1(clause(), lex_char('&'));
         let func = optional((lex_char('+'), qual_ident()).map(|f| f.1));
-        (rule_name, lex_char(':'), rule_head, lex_str("<-"), rule_body, func).map(|r| Rule {
+        (rule_name, stage, lex_char(':'), rule_head, lex_str("<-"), rule_body, func).map(|r| Rule {
             name: r.0,
-            head: r.2,
-            body: r.4,
-            func: r.5
+            head: r.3,
+            body: r.5,
+            func: r.6,
+            stage: r.1
         })
     }
 }
@@ -450,6 +452,7 @@ mod test {
             queries: vec![],
             rules: vec![
                 Rule {
+                    stage: None,
                     name: "eq_sig".to_string(),
                     head: Clause {
                         pred_name: "out".to_string(),
@@ -516,6 +519,7 @@ mod test {
             queries: vec![],
             rules: vec![
                 Rule {
+                    stage: None,
                     name: "eq_sig".to_string(),
                     head: Clause {
                         pred_name: "out".to_string(),

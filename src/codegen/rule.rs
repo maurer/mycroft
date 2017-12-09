@@ -52,19 +52,26 @@ pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
 
     let query_view_name = query::names::result_borrow(&rule.body_query);
 
-    let func_vars = rule.func_vars
-        .iter()
-        .map(|x| Ident::new(x.clone()))
-        .collect::<Vec<_>>();
-    let func_types = rule.func_types
-        .iter()
-        .map(|x| Ident::new(x.clone()))
-        .collect::<Vec<_>>();
+    let mut func_out_sig = BTreeMap::new();
+    for (var, type_) in rule.func_vars.iter().zip(rule.func_types.iter()) {
+        func_out_sig.insert(var, type_);
+    }
+    let mut func_vars = Vec::new();
+    let mut func_types = Vec::new();
+    for (var, type_) in func_out_sig {
+        func_vars.push(Ident::new(var.clone()));
+        func_types.push(Ident::new(type_.clone()));
+    }
 
     let mut stores = Vec::new();
 
-    for (index, (type_, field_name)) in rule.func_types.iter().zip(func_vars.clone()).enumerate() {
-        let store = typed::store(type_, &quote! {self.#field_name});
+    for (index, (type_, field_name)) in rule.func_types
+        .iter()
+        .zip(rule.func_vars.iter())
+        .enumerate()
+    {
+        let field_id = Ident::new(field_name.to_string());
+        let store = typed::store(type_, &quote! {self.#field_id});
         let index_lit = Lit::Int(index as u64, IntTy::Usize);
         stores.push(quote! {
             out[#index_lit] = #store;

@@ -225,9 +225,14 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             meta_names.push(name.clone());
             let rule_invokes: Vec<_> = rules.into_iter().map(rule::names::rule_invoke).collect();
             meta_defs.push(quote!{
-                pub fn #name(&mut self) -> Vec<Fact> {
+                pub fn #name(&mut self, start: &Instant, timeout: &Option<Duration>) -> Vec<Fact> {
                     let mut productive = Vec::new();
-                    #(productive.extend(&self.#rule_invokes());)*
+                    #(if let Some(ref timeout_duration) = *timeout {
+                          if *timeout_duration > start.elapsed() {
+                              return productive;
+                          }
+                      }
+                      productive.extend(&self.#rule_invokes());)*
                     productive
                 }
             });
@@ -271,6 +276,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             use mycroft_support::join::{Join, SkipIterator, Field, Restrict};
             use mycroft_support::derivation::{Derivation, RawDerivation, Fact};
             use std::collections::{HashMap, HashSet};
+            use std::time::{Duration, Instant};
             #[derive(Default)]
             struct QueryStorage {
                 mailboxes: Vec<usize>,
@@ -389,10 +395,10 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     Derivation::from_raw(raw, &|f| self.project_fact(f), &rule_id_to_name)
                 }
                 #(#meta_defs)*
-                pub fn run_rules_once(&mut self) -> Vec<Fact> {
+                fn run_rules_once(&mut self, start: &Instant, timeout: &Option<Duration>) -> Vec<Fact> {
                     let mut productive = Vec::new();
                     #({
-                        productive.extend(&self.#meta_invokes());
+                        productive.extend(&self.#meta_invokes(start, timeout));
                         if !productive.is_empty() {
                             return productive
                         }
@@ -400,7 +406,11 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     productive
                 }
                 pub fn run_rules(&mut self) {
-                    while !self.run_rules_once().is_empty() {}
+                    self.run_rules_with_timeout(None);
+                }
+                pub fn run_rules_with_timeout(&mut self, timeout: Option<Duration>) {
+                    let start = Instant::now();
+                    while !self.run_rules_once(&start, &timeout).is_empty() {}
                 }
                 #(#pred_inserts)*
                 #(#query_funcs)*

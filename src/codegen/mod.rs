@@ -155,12 +155,12 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                         let type_ = &pred.types[idx];
                         if typed::is_small(type_) {
                             build_aggs.push(quote! {
-                                aggs.push(Some(Box::new(::mycroft_support::aggregator::Func::new(#agg_name))))
+                                aggs.push(Some(Box::new(Func::new(#agg_name))))
                             })
                         } else {
                             let data = typed::name(type_);
                             build_aggs.push(quote! {
-                                aggs.push(Some(Box::new(::mycroft_support::aggregator::FuncData::new(#agg_name, #data.clone()))))
+                                aggs.push(Some(Box::new(FuncData::new(#agg_name, #data.clone()))))
                             })
                         }
                     }
@@ -169,7 +169,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             }
             quote! {
                 {
-                    use mycroft_support::aggregator::Aggregator;
+                    use mycroft_support::aggregator::{Aggregator, Func, FuncData};
                     let mut aggs: Vec<Option<Box<Aggregator>>> = Vec::new();
                     #(#build_aggs;)*
                     aggs
@@ -331,7 +331,10 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     #(#query_registrations)*
                     db
                 }
-                fn purge_mid(&mut self, base_pred_id: usize, m_mid: Option<usize>, cycle_fid: usize) {
+                fn purge_mid(&mut self,
+                             base_pred_id: usize,
+                             m_mid: Option<usize>,
+                             cycle_fid: usize) {
                     let mut mids: Vec<_> = m_mid.into_iter().map(|x| (base_pred_id, x)).collect();
                     let mut fids = Vec::new();
                     while !mids.is_empty() || !fids.is_empty() {
@@ -339,7 +342,11 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                             let (pred_id, mid) = mids.pop().unwrap();
                             if let Some(influenced) = self.midfids.remove(&(pred_id, mid)) {
                                 for target in influenced {
-                                    let (mfid, mmid) = self.tuple_by_id_mut(target.predicate_id).purge_mid_prov(target.fact_id, pred_id, mid, rule_slot_to_pred);
+                                    let (mfid, mmid) = self.tuple_by_id_mut(target.predicate_id)
+                                                           .purge_mid_prov(target.fact_id,
+                                                                           pred_id,
+                                                                           mid,
+                                                                           rule_slot_to_pred);
                                     if let Some(new_mid) = mmid {
                                         mids.push((target.predicate_id, new_mid));
                                     }
@@ -352,9 +359,15 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                         while !fids.is_empty() {
                             let (pred_id, fid) = fids.pop().unwrap();
                             assert_ne!((pred_id, fid), (base_pred_id, cycle_fid));
-                            if let Some(influenced) = self.fidfids.remove(&Fact {predicate_id: pred_id, fact_id: fid}) {
+                            let fact = Fact {predicate_id: pred_id, fact_id: fid};
+                            if let Some(influenced) = self.fidfids.remove(&fact) {
                                 for target in influenced {
-                                    let (mfid, mmid) = self.tuple_by_id_mut(target.predicate_id).purge_fid_prov(target.fact_id, pred_id, fid, rule_slot_to_pred);
+                                    let (mfid, mmid) = self
+                                        .tuple_by_id_mut(target.predicate_id)
+                                        .purge_fid_prov(target.fact_id,
+                                                        pred_id,
+                                                        fid,
+                                                        rule_slot_to_pred);
                                     if let Some(new_mid) = mmid {
                                         mids.push((target.predicate_id, new_mid));
                                     }
@@ -380,7 +393,8 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                 }
                 fn raw_derivation(&self, fact: &Fact) -> RawDerivation {
                     RawDerivation::from_storage(fact, &|key| self.tuple_by_id(key),
-                       &rule_slot_to_pred, HashSet::new(), 2).expect("No valid derivation for fact?")
+                       &rule_slot_to_pred, HashSet::new(), 2)
+                        .expect("No valid derivation for fact?")
                 }
                 fn project_fact(&self, f: &Fact) -> AnyFact {
                     let tuple = self.tuple_by_id(f.predicate_id).get(f.fact_id);
@@ -398,7 +412,9 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                 pub fn run_rules_once(&mut self) -> Vec<Fact> {
                     self.run_rules_once_with_timeout(&Instant::now(), &None)
                 }
-                fn run_rules_once_with_timeout(&mut self, start: &Instant, timeout: &Option<Duration>)
+                fn run_rules_once_with_timeout(&mut self,
+                                               start: &Instant,
+                                               timeout: &Option<Duration>)
                     -> Vec<Fact> {
                     let mut productive = Vec::new();
                     #({

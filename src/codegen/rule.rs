@@ -135,7 +135,9 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
                                 }).or_insert(Vec::new()).push(fact.clone());
                             }
                         }
-                        MergeRef::MetaId(mid) => self.midfids.entry((pred_id, mid)).or_insert(Vec::new()).push(fact.clone())
+                        MergeRef::MetaId(mid) =>
+                            self.midfids.entry((pred_id, mid))
+                                        .or_insert(Vec::new()).push(fact.clone())
                     }
                 }
             }

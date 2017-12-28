@@ -236,7 +236,8 @@ parser! {
     fn rule[I]()(I) -> Rule
         where [I: Stream<Item=char>] {
         let rule_name = ident();
-        let stage = optional((lex_char('@'), many1(digit())).map(|f: (_, String)| f.1.parse::<usize>().unwrap()));
+        let stage = optional((lex_char('@'), many1(digit()))
+                             .map(|f: (_, String)| f.1.parse::<usize>().unwrap()));
         let rule_head = clause();
         let rule_body = sep_by1(clause(), lex_char('&'));
         let func = optional((lex_char('+'), qual_ident()).map(|f| f.1));

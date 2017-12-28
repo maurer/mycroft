@@ -395,7 +395,11 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                     Derivation::from_raw(raw, &|f| self.project_fact(f), &rule_id_to_name)
                 }
                 #(#meta_defs)*
-                fn run_rules_once(&mut self, start: &Instant, timeout: &Option<Duration>) -> Vec<Fact> {
+                pub fn run_rules_once(&mut self) -> Vec<Fact> {
+                    self.run_rules_once_with_timeout(&Instant::now(), &None)
+                }
+                fn run_rules_once_with_timeout(&mut self, start: &Instant, timeout: &Option<Duration>)
+                    -> Vec<Fact> {
                     let mut productive = Vec::new();
                     #({
                         productive.extend(&self.#meta_invokes(start, timeout));
@@ -410,7 +414,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                 }
                 pub fn run_rules_with_timeout(&mut self, timeout: Option<Duration>) {
                     let start = Instant::now();
-                    while !self.run_rules_once(&start, &timeout).is_empty() {}
+                    while !self.run_rules_once_with_timeout(&start, &timeout).is_empty() {}
                 }
                 #(#pred_inserts)*
                 #(#query_funcs)*

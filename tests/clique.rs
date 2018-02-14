@@ -1,4 +1,6 @@
 #![feature(proc_macro)]
+#[macro_use]
+extern crate log;
 extern crate mycroft;
 extern crate mycroft_macros;
 extern crate mycroft_support;

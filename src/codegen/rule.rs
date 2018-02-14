@@ -172,6 +172,7 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
 
     quote! {
         pub fn #rule_invoke_name(&mut self) -> Vec<Fact> {
+            trace!("Now working on {}", #rule_name);
             let mut productive = Vec::new();
             let tuples = self.#query_incr_tuple_name();
             for (tuple, fids) in tuples {
@@ -181,6 +182,7 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
                 };
                 #tuple_action
             }
+            trace!("Generated {}", productive.len());
             productive
         }
     }

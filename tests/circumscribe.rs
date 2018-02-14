@@ -1,12 +1,18 @@
 #![feature(proc_macro)]
+#[macro_use]
+extern crate log;
 extern crate mycroft;
 extern crate mycroft_macros;
 extern crate mycroft_support;
 
 use mycroft_macros::mycroft_program;
 
-fn u8_plus(x: u8, y: u8) -> u8 {
-    x + y
+fn u8_plus(xs: &[u8]) -> u8 {
+    let mut out = 0;
+    for x in xs {
+        out += *x;
+    }
+    out
 }
 
 mycroft_program!(

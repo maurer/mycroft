@@ -255,6 +255,7 @@ impl<'a> Iterator for Join<'a> {
                         }
                         self.candidate.truncate(self.candidate_len.pop().unwrap());
                         self.fids.pop();
+
                         return Some((out, fids));
                     }
                     // We're not done yet
@@ -273,7 +274,6 @@ impl<'a> Iterator for Join<'a> {
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {

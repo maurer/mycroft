@@ -8,7 +8,8 @@ use storage;
 /// operation remains fully generic.
 pub trait Aggregator {
     /// This is an associative, commutative function over points in some dataspace.
-    fn aggregate(&self, usize, usize) -> usize;
+    /// Accepting more than two points is a hack to allow allocation skipping
+    fn aggregate(&self, &[usize]) -> usize;
     /// Clone, jammed into the trait to avoid multitrait problems
     fn agg_clone(&self) -> Box<Aggregator>;
 }
@@ -20,7 +21,7 @@ pub struct Func<F, T> {
     phantom: PhantomData<T>,
 }
 
-impl<T, F: Fn(T, T) -> T> Func<F, T> {
+impl<T, F: Fn(&[T]) -> T> Func<F, T> {
     /// Create a new small-typed aggregator
     pub fn new(f: F) -> Self {
         Self {
@@ -32,9 +33,10 @@ impl<T, F: Fn(T, T) -> T> Func<F, T> {
 
 macro_rules! castable_aggregator {
     ($ty:ty) => {
-impl<F: Fn($ty, $ty) -> $ty + 'static> Aggregator for Func<F, $ty> {
-    fn aggregate(&self, k0: usize, k1: usize) -> usize {
-        (self.f)(k0 as $ty, k1 as $ty) as usize
+impl<F: Fn(&[$ty]) -> $ty + 'static> Aggregator for Func<F, $ty> {
+    fn aggregate(&self, big_ks: &[usize]) -> usize {
+        let ks: Vec<_> = big_ks.iter().map(|x| *x as $ty).collect();
+        (self.f)(&ks) as usize
     }
     fn agg_clone(&self) -> Box<Aggregator> {
         Box::new(Self { f: self.f.clone(), phantom: PhantomData})
@@ -43,9 +45,10 @@ impl<F: Fn($ty, $ty) -> $ty + 'static> Aggregator for Func<F, $ty> {
 }
 }
 
-impl<F: Fn(bool, bool) -> bool + 'static> Aggregator for Func<F, bool> {
-    fn aggregate(&self, k0: usize, k1: usize) -> usize {
-        (self.f)(k0 == 1, k1 == 1) as usize
+impl<F: Fn(&[bool]) -> bool + 'static> Aggregator for Func<F, bool> {
+    fn aggregate(&self, big_ks: &[usize]) -> usize {
+        let ks: Vec<_> = big_ks.iter().map(|x| *x == 1).collect();
+        (self.f)(&ks) as usize
     }
     fn agg_clone(&self) -> Box<Aggregator> {
         Box::new(Self {
@@ -66,8 +69,7 @@ castable_aggregator!(i32);
 castable_aggregator!(i64);
 castable_aggregator!(isize);
 
-
-/// FuncData is a convenient way to box up a (T,T)->T style function as one that acts on
+/// FuncData is a convenient way to box up a &[T]->T style function as one that acts on
 /// coordinates instead by wrapping it with a handle to the relevant Data.
 #[derive(Clone)]
 pub struct FuncData<T, F> {
@@ -75,7 +77,7 @@ pub struct FuncData<T, F> {
     data: storage::Data<T>,
 }
 
-impl<T, F: Fn(&T, &T) -> T> FuncData<T, F> {
+impl<T, F: Fn(&[&T]) -> T> FuncData<T, F> {
     /// Creates a new `FuncData`, from the actual function you want to use plus the dataspace it
     /// operates on.
     pub fn new(f: F, data: storage::Data<T>) -> Self {
@@ -86,11 +88,14 @@ impl<T, F: Fn(&T, &T) -> T> FuncData<T, F> {
     }
 }
 
-impl<T: Hash + PartialEq + 'static, F: Fn(&T, &T) -> T + 'static> Aggregator for FuncData<T, F> {
-    fn aggregate(&self, k0: usize, k1: usize) -> usize {
-        let v = (self.f)(&self.data[k0], &self.data[k1]);
+impl<T: Hash + PartialEq + 'static, F: Fn(&[&T]) -> T + 'static> Aggregator for FuncData<T, F> {
+    fn aggregate(&self, ks: &[usize]) -> usize {
+        let v = {
+            let vs: Vec<_> = ks.iter().map(|k| &self.data[*k]).collect();
+            (self.f)(&vs)
+        };
         unsafe {
-            self.data.read_exit(2);
+            self.data.read_exit(ks.len());
         }
         self.data.insert(v)
     }

@@ -98,6 +98,8 @@ pub struct QueryOut {
 // Generates all the projections for the predicates used in the query
 fn build_projs(query: &ir::Query) -> (quote::Tokens, Vec<quote::Tokens>) {
     let mut proj_nums = Vec::new();
+    let mut do_forces = Vec::new();
+    let mut seen_preds = Vec::new();
     let build_projs = query
         .gao
         .iter()
@@ -109,6 +111,13 @@ fn build_projs(query: &ir::Query) -> (quote::Tokens, Vec<quote::Tokens>) {
             let nums = quote! { &[#(#raw_nums),*] };
             proj_nums.push(nums.clone());
             let pred_name = predicate::names::tuple(&query.predicates[pred_id]);
+            if !seen_preds.contains(&pred_id) {
+                seen_preds.push(pred_id);
+                let pred_force = pred_name.clone();
+                do_forces.push(quote! {
+                    self.#pred_force.force();
+                });
+            }
             let proj_i = names::proj(pred_id);
             quote! {
                 let #proj_i = self.#pred_name.projection(#nums);
@@ -117,6 +126,7 @@ fn build_projs(query: &ir::Query) -> (quote::Tokens, Vec<quote::Tokens>) {
         .collect::<Vec<_>>();
     (
         quote! {
+            #(#do_forces;)*
             #(#build_projs;)*
         },
         proj_nums,
@@ -297,7 +307,7 @@ fn gen_query(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
     let restricts = restricts(query);
     (
         quote! {
-            pub fn #query_func(&self) -> Vec<#result> {
+            pub fn #query_func(&mut self) -> Vec<#result> {
                 #build_projs
                 #build_idxs
                 let mut indices: Vec<&mut SkipIterator> = Vec::new();

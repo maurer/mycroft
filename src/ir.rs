@@ -403,15 +403,29 @@ impl Query {
 
         // Generate the GAO
         let mut pre_gao = Vec::new();
+
         // First, any constant terms
         for &(ref qf, _) in &pre_eq {
             pre_gao.push(qf.clone());
         }
+
         // Then, add unifications, grouped
         for var in &vars {
             let qfs = &pre_unify[var];
-            for qf in qfs.iter() {
-                pre_gao.push(qf.clone());
+            if qfs.len() > 1 {
+                for qf in qfs.iter() {
+                    pre_gao.push(qf.clone());
+                }
+            }
+        }
+
+        // Finally, projections
+        for var in &vars {
+            let qfs = &pre_unify[var];
+            if qfs.len() <= 1 {
+                for qf in qfs.iter() {
+                    pre_gao.push(qf.clone());
+                }
             }
         }
 

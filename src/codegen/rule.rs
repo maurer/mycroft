@@ -114,6 +114,7 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
         })
         .collect();
     let rule_invoke_name = names::rule_invoke(rule);
+    let rule_name = rule.name.clone();
     let tuple_name = predicate::names::tuple(&rule.head_pred);
     let query_incr_tuple_name = query::names::incr_tuple(&rule.body_query);
 

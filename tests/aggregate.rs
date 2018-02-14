@@ -9,13 +9,19 @@ use mycroft_macros::mycroft_program;
 
 type Vu16 = Vec<u16>;
 
-fn u8_plus(x: u8, y: u8) -> u8 {
-    x + y
+fn u8_plus(xs: &[u8]) -> u8 {
+    let mut out = 0;
+    for x in xs {
+        out += *x;
+    }
+    out
 }
 
-fn vu16_append(x: &Vu16, y: &Vu16) -> Vu16 {
-    let mut out = x.clone();
-    out.extend(y);
+fn vu16_append(xs: &[&Vu16]) -> Vu16 {
+    let mut out = Vec::new();
+    for x in xs {
+        out.extend(x.iter());
+    }
     out.sort();
     out
 }

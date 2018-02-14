@@ -155,6 +155,59 @@ impl Provenance {
     }
 }
 
+#[derive(Default, Eq, Ord, Hash, Debug, PartialOrd, PartialEq, Clone)]
+struct AggVal {
+    fids: Vec<usize>,
+    fids_loaded: usize,
+    agg: Option<Vec<usize>>,
+}
+
+impl AggVal {
+    fn new() -> Self {
+        Self::default()
+    }
+    fn partial_load(&mut self, ts: &Tuples) {
+        if self.agg.is_none() {
+            self.agg = Some(permute(&ts.agg_indices, &ts.get(self.fids[0])));
+            self.fids_loaded = 1;
+        }
+    }
+    fn force(&mut self, ts: &Tuples) -> Vec<usize> {
+        self.partial_load(ts);
+        let mut new_agg = Vec::new();
+        for (idx, agg_val) in self.agg.take().unwrap().iter().enumerate() {
+            let mut input = vec![*agg_val];
+            for fid in &self.fids[self.fids_loaded..] {
+                input.push(ts.inner[ts.agg_indices[idx]][*fid]);
+            }
+            new_agg.push(ts.aggs[idx].aggregate(&input));
+        }
+        self.agg = Some(new_agg.clone());
+        self.fids_loaded = self.fids.len();
+        new_agg
+    }
+    fn current(&self) -> Option<Vec<usize>> {
+        self.agg.clone()
+    }
+    fn purge_fid(&mut self, fid: usize) {
+        let mut old_fids = Vec::new();
+        ::std::mem::swap(&mut old_fids, &mut self.fids);
+        self.fids = old_fids.into_iter().filter(|x| *x != fid).collect();
+        self.fids_loaded = 0;
+    }
+    fn add_fid(&mut self, fid: usize) -> bool {
+        if !self.fids.contains(&fid) {
+            self.fids.push(fid);
+            true
+        } else {
+            false
+        }
+    }
+    fn is_empty(&self) -> bool {
+        self.fids.is_empty()
+    }
+}
+
 /// In-memory Tuple store.
 ///
 /// * Stores exactly one copy of each tuple
@@ -163,7 +216,7 @@ impl Provenance {
 pub struct Tuples {
     inner: Vec<Tuple>,
     index: HashIndex<[usize]>,
-    agg_map: HashMap<Vec<usize>, (Vec<usize>, Vec<usize>)>,
+    agg_map: HashMap<Vec<usize>, AggVal>,
     agg_indices: Vec<usize>,
     key_indices: Vec<usize>,
     aggs: Vec<Box<Aggregator + 'static>>,
@@ -172,6 +225,7 @@ pub struct Tuples {
     provenance: Vec<BTreeSet<Provenance>>,
     meta: Vec<Vec<FactId>>,
     inv_meta: HashMap<Vec<FactId>, MetaId>,
+    delayed: BTreeSet<Vec<usize>>,
 }
 
 struct Rows<'a> {
@@ -199,6 +253,46 @@ fn get_unchecked(inner: &Vec<Vec<usize>>, key: FactId) -> Vec<usize> {
 }
 
 impl Tuples {
+    fn forced(&self) -> bool {
+        self.delayed.is_empty()
+    }
+    /// Take all the delayed tuples and update the indices.
+    /// Must be called prior to requesting a projection
+    pub fn force(&mut self) {
+        let mut all_delayed = BTreeSet::new();
+        ::std::mem::swap(&mut all_delayed, &mut self.delayed);
+        for delayed in all_delayed {
+            let mut agg_val = self.agg_map.remove(&delayed).unwrap();
+            let mut old_tup = delayed.clone();
+            if let Some(cur) = agg_val.current() {
+                old_tup.extend(cur);
+
+                for proj in self.projections.values_mut() {
+                    proj.remove(&old_tup)
+                }
+                for mailbox in self.mailboxes.iter_mut() {
+                    mailbox.remove(&old_tup)
+                }
+            }
+
+            if !agg_val.is_empty() {
+                let mut new_tup = delayed.clone();
+                new_tup.extend(agg_val.force(&self));
+
+                let fids = agg_val.fids.clone();
+
+                for proj in self.projections.values_mut() {
+                    proj.insert(&new_tup, fids.clone())
+                }
+                for mailbox in self.mailboxes.iter_mut() {
+                    mailbox.insert(&new_tup, fids.clone())
+                }
+
+                self.agg_map.insert(delayed, agg_val);
+            }
+        }
+    }
+
     // Basic integrity check
     fn integrity(&self) -> bool {
         // We have non-zero arity
@@ -222,6 +316,7 @@ impl Tuples {
     /// Acquires a **previously registered** projection for the permutation provided. If you did not
     /// register the projection, an assertion will trip.
     pub fn projection(&self, fields: &[usize]) -> &Projection {
+        assert!(self.forced());
         match self.projections.get(fields) {
             Some(ref p) => p,
             None => {
@@ -237,6 +332,7 @@ impl Tuples {
     /// Acquires the index at a previously registered mailbox, emptying it out and returning the
     /// projection that was there.
     pub fn mailbox(&mut self, mailbox: usize) -> Projection {
+        self.force();
         self.mailboxes[mailbox].take()
     }
     /// Requests that a projection be made available for a given permutation. This is essentially
@@ -303,6 +399,7 @@ impl Tuples {
             agg_map: HashMap::new(),
             agg_indices: agg_indices,
             key_indices: key_indices,
+            delayed: BTreeSet::new(),
         }
     }
     /// Returns the arity of the tuples stored
@@ -391,47 +488,11 @@ impl Tuples {
         let key_tuple = permute(&self.key_indices, &vals);
         match self.agg_map.entry(key_tuple) {
             hash_map::Entry::Occupied(mut oe) => {
-                assert!(oe.get().1.contains(&fid));
-                let old_fids = oe.get().1.clone();
+                assert!(oe.get().fids.contains(&fid));
+                let old_fids = oe.get().fids.clone();
 
-                let mut old_tup = oe.key().clone();
-                old_tup.extend(oe.get().0.clone());
-
-                for proj in self.projections.values_mut() {
-                    proj.remove(&old_tup)
-                }
-                for mailbox in self.mailboxes.iter_mut() {
-                    mailbox.remove(&old_tup)
-                }
-
-                oe.get_mut().1 = old_fids.clone().into_iter().filter(|x| *x != fid).collect();
-                if oe.get().1.is_empty() {
-                    oe.remove_entry();
-                } else {
-                    let mut agg_tup = permute(
-                        &self.agg_indices,
-                        &get_unchecked(&self.inner, oe.get().1[0]),
-                    );
-                    for fid in &oe.get().1[1..] {
-                        for (i, nagg) in
-                            permute(&self.agg_indices, &get_unchecked(&self.inner, *fid))
-                                .into_iter()
-                                .enumerate()
-                        {
-                            agg_tup[i] = self.aggs[i].aggregate(agg_tup[i], nagg);
-                        }
-                    }
-                    oe.get_mut().0 = agg_tup;
-
-                    let mut new_tup = oe.key().clone();
-                    new_tup.extend(oe.get().0.clone());
-                    for proj in self.projections.values_mut() {
-                        proj.insert(&new_tup, oe.get().1.clone())
-                    }
-                    for mailbox in self.mailboxes.iter_mut() {
-                        mailbox.insert(&new_tup, oe.get().1.clone())
-                    }
-                }
+                self.delayed.insert(oe.key().clone());
+                oe.get_mut().purge_fid(fid);
                 self.inv_meta.get(&old_fids).map(|x| x.clone())
             }
             hash_map::Entry::Vacant(_) => panic!("Purged a fact not in the aggmap"),
@@ -442,10 +503,10 @@ impl Tuples {
     /// The returned value is a tuple of the key, whether the value was new (true for new),
     /// and any MetaId that got broken by the insert
     pub fn insert(&mut self, val: &[usize], p: Provenance) -> (FactId, bool, Option<MetaId>) {
-        match self.find(&val) {
+        let key = match self.find(&val) {
             Some(id) => {
                 self.provenance[id].insert(p);
-                (id, false, None)
+                id
             }
             None => {
                 assert_eq!(val.len(), self.arity());
@@ -458,59 +519,27 @@ impl Tuples {
                 for (col, new_val) in self.inner.iter_mut().zip(val.into_iter()) {
                     col.push(*new_val)
                 }
+                key
+            }
+        };
 
-                let key_tuple = permute(&self.key_indices, &val);
-                let agg_tuple = permute(&self.agg_indices, &val);
+        let key_tuple = permute(&self.key_indices, &val);
 
-                let (updated, agg_done, old, mmid) = match self.agg_map.entry(key_tuple) {
-                    hash_map::Entry::Occupied(mut oe) => {
-                        let old = oe.get().0.clone();
-                        for (i, agg_elem) in agg_tuple.iter().enumerate() {
-                            oe.get_mut().0[i] = self.aggs[i].aggregate(oe.get().0[i], *agg_elem)
-                        }
-                        let mmid = self.inv_meta.get(&oe.get().1).map(|x| *x);
-                        oe.get_mut().1.push(key);
-                        let new = oe.get().clone();
-                        (old != new.0, new, Some(old), mmid)
-                    }
-                    hash_map::Entry::Vacant(ve) => {
-                        let out = (agg_tuple.clone(), vec![key]);
-                        ve.insert(out.clone());
-                        (true, out, None, None)
-                    }
-                };
-
-                if updated {
-                    let mut done_tuple = val.to_vec();
-                    for (i, agg_idx) in self.agg_indices.iter().enumerate() {
-                        done_tuple[*agg_idx] = agg_done.0[i];
-                    }
-
-                    match old {
-                        Some(old_agg) => {
-                            let mut old_tup = val.to_vec();
-                            for (i, agg_idx) in self.agg_indices.iter().enumerate() {
-                                old_tup[*agg_idx] = old_agg[i]
-                            }
-
-                            for proj in self.projections.values_mut() {
-                                proj.remove(&old_tup)
-                            }
-                            for mailbox in self.mailboxes.iter_mut() {
-                                mailbox.remove(&old_tup)
-                            }
-                        }
-                        None => (),
-                    }
-
-                    for proj in self.projections.values_mut() {
-                        proj.insert(&done_tuple, agg_done.1.clone())
-                    }
-                    for mailbox in self.mailboxes.iter_mut() {
-                        mailbox.insert(&done_tuple, agg_done.1.clone())
-                    }
+        match self.agg_map.entry(key_tuple) {
+            hash_map::Entry::Occupied(mut oe) => {
+                let mmid = self.inv_meta.get(&oe.get().fids).map(|x| *x);
+                let fresh = oe.get_mut().add_fid(key);
+                if fresh {
+                    self.delayed.insert(oe.key().clone());
                 }
-                (key, true, mmid)
+                (key, fresh, mmid)
+            }
+            hash_map::Entry::Vacant(ve) => {
+                let mut agg_val = AggVal::new();
+                agg_val.add_fid(key);
+                self.delayed.insert(ve.key().clone());
+                ve.insert(agg_val.clone());
+                (key, true, None)
             }
         }
     }

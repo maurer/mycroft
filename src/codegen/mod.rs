@@ -34,7 +34,9 @@ fn snakize(s: &str) -> String {
         match c {
             c if !c.is_alphanumeric() => case = false,
             c if c.is_uppercase() && !case => {
-                out_chars.push('_');
+                if out_chars.len() != 0 {
+                    out_chars.push('_');
+                }
                 out_chars.extend(c.to_lowercase());
                 case = true;
             }

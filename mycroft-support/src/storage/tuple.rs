@@ -263,29 +263,37 @@ impl Tuples {
         ::std::mem::swap(&mut all_delayed, &mut self.delayed);
         for delayed in all_delayed {
             let mut agg_val = self.agg_map.remove(&delayed).unwrap();
-            let mut old_tup = delayed.clone();
+            let mut tup = Vec::new();
+            tup.resize(self.arity(), 0);
+            for (i, key_idx) in self.key_indices.iter().enumerate() {
+                tup[*key_idx] = delayed[i];
+            }
             if let Some(cur) = agg_val.current() {
-                old_tup.extend(cur);
+                for (i, agg_idx) in self.agg_indices.iter().enumerate() {
+                    tup[*agg_idx] = cur[i];
+                }
 
                 for proj in self.projections.values_mut() {
-                    proj.remove(&old_tup)
+                    proj.remove(&tup)
                 }
                 for mailbox in self.mailboxes.iter_mut() {
-                    mailbox.remove(&old_tup)
+                    mailbox.remove(&tup)
                 }
             }
 
             if !agg_val.is_empty() {
-                let mut new_tup = delayed.clone();
-                new_tup.extend(agg_val.force(&self));
+                let new = agg_val.force(&self);
+                for (i, agg_idx) in self.agg_indices.iter().enumerate() {
+                    tup[*agg_idx] = new[i]
+                }
 
                 let fids = agg_val.fids.clone();
 
                 for proj in self.projections.values_mut() {
-                    proj.insert(&new_tup, fids.clone())
+                    proj.insert(&tup, fids.clone())
                 }
                 for mailbox in self.mailboxes.iter_mut() {
-                    mailbox.insert(&new_tup, fids.clone())
+                    mailbox.insert(&tup, fids.clone())
                 }
 
                 self.agg_map.insert(delayed, agg_val);

@@ -1,7 +1,10 @@
 [package]
 name = "mycroft-macros-impl"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
+license = "MIT"
+description = "Macro implementations for Mycroft (separated due to proc-macro-hack)"
+repository = "https://github.com/maurer/mycroft"
 
 [lib]
 proc-macro = true

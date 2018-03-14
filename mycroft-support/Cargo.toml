@@ -1,7 +1,11 @@
 [package]
 name = "mycroft-support"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
+license = "MIT"
+description = "Runtime support for Mycroft generated code"
+repository = "https://github.com/maurer/mycroft"
+
 
 [dependencies]
 log = "0.4"

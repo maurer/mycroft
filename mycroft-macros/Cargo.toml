@@ -1,7 +1,11 @@
 [package]
 name = "mycroft-macros"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
+license = "MIT"
+description = "Macro interface to the Mycroft compiler"
+repository = "https://github.com/maurer/mycroft"
+
 
 [dependencies]
 mycroft-macros-impl = {path = "../mycroft-macros-impl"}

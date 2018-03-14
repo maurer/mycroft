@@ -1,0 +1,14 @@
+[package]
+name = "mycroft-macros-impl"
+version = "0.1.0"
+authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro-hack = "0.4"
+mycroft = {path = ".."}
+syn = { version = "0.11", features = ["full", "printing", "parsing"] }
+combine = "2.5"
+quote = "0.4"

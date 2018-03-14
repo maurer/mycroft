@@ -296,7 +296,9 @@ parser! {
 /// `program` will return a combine parser constructor that will parse legal Mycroft programs.
 /// To parse with it:
 /// ```
-/// use combine::{Parser, Result};
+/// extern crate mycroft;
+/// extern crate combine;
+/// use combine::Parser;
 /// use mycroft::parse::program;
 /// let prog_code = r#"
 ///         bar(bang)

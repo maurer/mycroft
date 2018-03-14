@@ -11,6 +11,7 @@ syn = "0.11"
 
 [dev-dependencies]
 mycroft-macros = { path = "mycroft-macros" }
+mycroft-macros-impl = { path = "mycroft-macros-impl" }
 mycroft-support = { path = "mycroft-support" }
 log = "0.4"
 rand = "0.3"

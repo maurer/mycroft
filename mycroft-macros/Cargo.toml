@@ -3,13 +3,6 @@ name = "mycroft-macros"
 version = "0.1.0"
 authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
 
-[lib]
-proc-macro = true
-
 [dependencies]
-mycroft = {path = ".."}
-# Using * here for development due to being in a workspace
-# Sync to versions in master Cargo.toml before any publication
-syn = { version = "0.11", features = ["full", "printing", "parsing"] }
-combine = "2.5"
-quote = "0.4"
+mycroft-macros-impl = {path = "../mycroft-macros-impl"}
+proc-macro-hack = "0.4"

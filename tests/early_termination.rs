@@ -1,13 +1,13 @@
-#![feature(proc_macro)]
 #[macro_use]
 extern crate log;
 extern crate mycroft;
+#[macro_use]
 extern crate mycroft_macros;
 extern crate mycroft_support;
 
-use mycroft_macros::mycroft_program;
-use mycroft_program::{IncIn, IncOut};
 use std::time::Duration;
+
+use mycroft_program::{IncIn, IncOut};
 
 fn inc(i: &IncIn) -> Vec<IncOut> {
     vec![

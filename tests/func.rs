@@ -1,11 +1,9 @@
-#![feature(proc_macro)]
 #[macro_use]
 extern crate log;
 extern crate mycroft;
+#[macro_use]
 extern crate mycroft_macros;
 extern crate mycroft_support;
-
-use mycroft_macros::mycroft_program;
 
 const THREE: u32 = 3;
 

@@ -1,6 +1,6 @@
 //! `derivation` handles operations related to walking the provenance graph
 use std::collections::HashSet;
-use storage::tuple::{MergeRef, Provenance};
+use crate::storage::tuple::{MergeRef, Provenance};
 
 /// Abstract fact, pre-projection
 /// Projected facts are handled in the codegen due to their type depending on the contents of the

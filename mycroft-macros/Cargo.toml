@@ -3,10 +3,15 @@ name = "mycroft-macros"
 version = "0.0.1"
 authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
 license = "MIT"
-description = "Macro interface to the Mycroft compiler"
+description = "Macro implementations for Mycroft (separated due to proc-macro-hack)"
 repository = "https://github.com/maurer/mycroft"
+edition = "2018"
 
+[lib]
+proc-macro = true
 
 [dependencies]
-mycroft-macros-impl = {path = "../mycroft-macros-impl"}
-proc-macro-hack = "0.4"
+mycroft = {path = ".."}
+syn = { version = "0.11", features = ["full", "printing", "parsing"] }
+combine = "2.5"
+quote = "0.4"

@@ -1,9 +1,4 @@
-#[macro_use]
-extern crate log;
-extern crate mycroft;
-#[macro_use]
-extern crate mycroft_macros;
-extern crate mycroft_support;
+use mycroft_macros::mycroft_program;
 
 fn u8_plus(xs: &[u8]) -> u8 {
     let mut out = 0;
@@ -35,7 +30,7 @@ baz_add: Baz(~(4)) <- ~Baz(~(0))
 
 #[test]
 fn circ_cc() {
-    use mycroft_program::{Bar, Database, Foo, GetBazResult, GetFooResult};
+    use crate::mycroft_program::{Bar, Database, Foo, GetBazResult, GetFooResult};
     let mut db = Database::new();
     println!("Simple insert");
     db.insert_foo(Foo { arg0: 0 });

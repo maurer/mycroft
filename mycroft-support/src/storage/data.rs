@@ -1,7 +1,7 @@
 //! `data` provides a facility to hold typed data in a deduped fashion, identified by a `usize`
 //! key. The only requirements are that the data be `Hash` and `PartialEq`.
 //! At the moment, this is done as an in-memory store.
-use index::hash::HashIndex;
+use crate::index::hash::HashIndex;
 use std::hash::Hash;
 use std::ops::Index;
 use std::rc::Rc;

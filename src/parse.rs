@@ -1,11 +1,11 @@
 // The parser! macro spews unbound matches, so disable the lint in this file
 //! Provides parsing functions for the Mycroft language.
 #![allow(clippy::unneeded_field_pattern)]
-use ast::*;
+use crate::ast::*;
 use combine::char::{char, digit, letter, newline, spaces, string};
 use combine::primitives::{Consumed, Stream};
 use combine::{
-    any, between, many, many1, not_followed_by, optional, parser, sep_by1, skip_many, try, Parser,
+    any, between, many, many1, not_followed_by, optional, parser, sep_by1, skip_many, r#try, Parser,
 };
 
 /// This is not for general use, it's public due to a quirk of the parser! macro
@@ -24,7 +24,7 @@ pub enum AnyStmt {
 parser! {
     fn comment[I]()(I) -> ()
         where [I: Stream<Item=char>] {
-        (string("//"), skip_many(not_followed_by(newline()).with(any())), newline(), try(spaces()))
+        (string("//"), skip_many(not_followed_by(newline()).with(any())), newline(), r#try(spaces()))
             .map(|_| ())
     }
 }
@@ -174,7 +174,7 @@ parser! {
                 name: f.0,
                 val: f.1
             }});
-        let shortcut_field = try(field).or(ident().map(|i| NamedField {
+        let shortcut_field = r#try(field).or(ident().map(|i| NamedField {
             name: i.clone(),
             val: Match::Var(i.clone()),
         }));
@@ -276,7 +276,7 @@ parser! {
 parser! {
     fn any_stmt[I]()(I) -> AnyStmt
         where [I: Stream<Item=char>] {
-        try(skip_many(comment())).with(query_any().or(try(pred_any())).or(rule_any()))
+        r#try(skip_many(comment())).with(query_any().or(r#try(pred_any())).or(rule_any()))
     }
 }
 
@@ -318,7 +318,7 @@ parser! {
 #[cfg(test)]
 mod test {
     use super::program;
-    use ast::*;
+    use crate::ast::*;
     use combine::Parser;
 
     // Empty program parses

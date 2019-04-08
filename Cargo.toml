@@ -5,16 +5,16 @@ authors = ["Matthew Maurer <matthew.r.maurer@gmail.com>"]
 license = "MIT"
 description = "Datalog-inspired programming language with circumscriptive negation and functions"
 repository = "https://github.com/maurer/mycroft"
+edition = "2018"
 
 [dependencies]
 combine = "2.5"
 error-chain = "0.11.0"
-quote = "0.3"
-syn = "0.11"
+quote = "0.6"
+syn = "0.15"
 
 [dev-dependencies]
 mycroft-macros = { path = "mycroft-macros", version = "0.0.1" }
-mycroft-macros-impl = { path = "mycroft-macros-impl", version = "0.0.1" }
 mycroft-support = { path = "mycroft-support", version = "0.0.1" }
 log = "0.4"
-rand = "0.3"
+rand = "0.4"

@@ -1,16 +1,16 @@
 //! `codegen` contains code related to producing Rust code with the relevant data structures.
 //! It would be difficult to avoid generating code due to type-level decisions in terms of what
 //! data structures and APIs to provide.
-use ir;
+use crate::ir;
 use syn::{Ident, IntTy, Lit};
 use quote;
 use super::typed;
 use std::collections::BTreeMap;
 
 pub mod names {
-    use ir;
+    use crate::ir;
     use syn::Ident;
-    use codegen::camelize;
+    use crate::codegen::camelize;
 
     // Fields of a predicate, using native names if present, or arg0-argN if not
     pub fn fields(pred: &ir::Predicate) -> Vec<Ident> {

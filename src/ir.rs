@@ -4,12 +4,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ast;
+use crate::ast;
 
 /// `error-chain`-generated error module for the checks occurring during transformation from
 /// AST into IR.
 pub mod error {
-    use ast;
+    use crate::ast;
     error_chain! {
         errors {
             #[doc = "A predicate is defined twice"]

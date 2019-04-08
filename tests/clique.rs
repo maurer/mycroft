@@ -1,9 +1,4 @@
-#[macro_use]
-extern crate log;
-extern crate mycroft;
-#[macro_use]
-extern crate mycroft_macros;
-extern crate mycroft_support;
+use mycroft_macros::mycroft_program;
 
 const ZERO: u64 = 0;
 const END: u64 = 10;
@@ -21,7 +16,7 @@ clique: same_clique(x, y) <- reachable(x, y) & reachable(y, x)
 
 #[test]
 fn clique() {
-    use mycroft_program::{Database, Edge};
+    use crate::mycroft_program::{Database, Edge};
     let mut db = Database::new();
     for i in ZERO..END {
         db.insert_edge(Edge {

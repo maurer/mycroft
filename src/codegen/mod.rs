@@ -1,7 +1,7 @@
 //! `codegen` contains code related to producing Rust code with the relevant data structures.
 //! It would be difficult to avoid generating code due to type-level decisions in terms of what
 //! data structures and APIs to provide.
-use ir;
+use crate::ir;
 use quote;
 use std::collections::BTreeMap;
 use syn::{Ident, IntTy, Lit, StrStyle};
@@ -286,6 +286,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
        mod mycroft_program {
             #![allow(unused_imports,dead_code,unused_variables,unused_mut,unused_unsafe,missing_docs)]
             use super::*;
+            use log::{trace, log};
             use mycroft_support::storage::{Tuples, Data, Provenance, MergeRef};
             use mycroft_support::join::{Join, SkipIterator, Field, Restrict};
             use mycroft_support::derivation::{Derivation, RawDerivation, Fact};
@@ -336,7 +337,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                         #(#pred_names2: Tuples::new(#arities),)*
                         #(#data_type_names3: #data_type_names4,)*
                         #(#query_storage_names2: QueryStorage::default(),)*
-                        #(#k_names2: ::std::usize::MAX,)*
+                        #(#k_names2: std::usize::MAX,)*
                         fidfids: HashMap::new(),
                         midfids: HashMap::new(),
                     };

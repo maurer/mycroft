@@ -1,9 +1,5 @@
-#[macro_use]
-extern crate log;
-extern crate mycroft;
-#[macro_use]
-extern crate mycroft_macros;
-extern crate mycroft_support;
+use mycroft_macros::mycroft_program;
+use mycroft_macros_impl::mycroft_program_impl;
 
 const THREE: u32 = 3;
 
@@ -13,11 +9,11 @@ Foo(String)
 Bar{a: u32, b: u64}
 ?check_foo: Foo(out)
 xlat_foos: Foo(out) <- Bar{a: ~THREE, b: x} + xlat
-gen_check: Foo(out) <- Bar{a: ~THREE, b: x} + ::xlat_b
+gen_check: Foo(out) <- Bar{a: ~THREE, b: x} + xlat_b
 "#
 );
 
-use mycroft_program::*;
+use crate::mycroft_program::*;
 
 pub fn xlat(i: &XlatIn) -> Vec<XlatOut> {
     let ss = vec![format!("{}", i.x), format!("{}.0", i.x)];

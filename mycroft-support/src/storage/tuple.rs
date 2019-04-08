@@ -1,9 +1,9 @@
 //! `tuples` contains structures related to an in-memory tuple-store for `usize` values.
 //! It is intended to be used in conjunction with `storage::Data` to provid arbitrary-typed tuple
 //! functionality.
-use aggregator::Aggregator;
-use index::hash::{CheckIndex, HashIndex};
-use join::SkipIterator;
+use crate::aggregator::Aggregator;
+use crate::index::hash::{CheckIndex, HashIndex};
+use crate::join::SkipIterator;
 use std::collections::btree_map;
 use std::collections::hash_map;
 use std::collections::{BTreeMap, BTreeSet, HashMap};

@@ -1,9 +1,4 @@
-#[macro_use]
-extern crate log;
-extern crate mycroft;
-#[macro_use]
-extern crate mycroft_macros;
-extern crate mycroft_support;
+use mycroft_macros::mycroft_program;
 
 type Vu16 = Vec<u16>;
 const THREE: u64 = 3;
@@ -29,7 +24,7 @@ join_rule: JoinOut {join_out: join_out, idx: idx} <- Bar(idx) & Baz{fizz: join_o
 
 #[test]
 fn rule_invoke() {
-    use mycroft_program::{Bar, Baz, Database};
+    use crate::mycroft_program::{Bar, Baz, Database};
     let mut db = Database::new();
     db.insert_bar(Bar { arg0: 3 });
     db.insert_bar(Bar { arg0: 42 });
@@ -70,7 +65,7 @@ fn rule_invoke() {
 
 #[test]
 fn all_invoke() {
-    use mycroft_program::{Bar, Baz, Database};
+    use crate::mycroft_program::{Bar, Baz, Database};
     let mut db = Database::new();
     db.insert_bar(Bar { arg0: 3 });
     db.insert_bar(Bar { arg0: 42 });

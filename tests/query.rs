@@ -1,8 +1,4 @@
-extern crate log;
-extern crate mycroft;
-#[macro_use]
-extern crate mycroft_macros;
-extern crate mycroft_support;
+use mycroft_macros::mycroft_program;
 
 type Vu16 = Vec<u16>;
 const THREE: u64 = 3;
@@ -19,7 +15,7 @@ Baz{boom: i32, fizz: Vu16, bash: u64}
 
 #[test]
 fn basic_queries() {
-    use mycroft_program::{Bar, Baz, Database};
+    use crate::mycroft_program::{Bar, Baz, Database};
     let mut db = Database::new();
     db.insert_bar(Bar { arg0: 3 });
     db.insert_bar(Bar { arg0: 42 });
@@ -51,7 +47,7 @@ fn basic_queries() {
 
 #[test]
 fn incremental_queries() {
-    use mycroft_program::{Bar, Baz, Database};
+    use crate::mycroft_program::{Bar, Baz, Database};
     let mut db = Database::new();
     assert_eq!(db.query_ordered().len(), 0);
     assert_eq!(db.query_incr_ordered().len(), 0);

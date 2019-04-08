@@ -1,14 +1,14 @@
-use ir;
+use crate::ir;
 use syn::{Ident, IntTy, Lit};
 use quote;
 use super::{predicate, typed};
 use std::collections::BTreeMap;
 
 pub mod names {
-    use ir;
+    use crate::ir;
     use syn::Ident;
     use super::super::predicate;
-    use codegen::camelize;
+    use crate::codegen::camelize;
 
     // Name of query local storage
     pub fn store(query: &ir::Query) -> Ident {

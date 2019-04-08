@@ -1,13 +1,13 @@
-use ir;
+use crate::ir;
 use quote;
 use syn::{Ident, IntTy, Lit};
 use std::collections::BTreeMap;
 use super::{predicate, query, typed};
 
 pub mod names {
-    use ir;
+    use crate::ir;
     use syn::Ident;
-    use codegen::camelize;
+    use crate::codegen::camelize;
 
     pub fn rule_invoke(rule: &ir::Rule) -> Ident {
         Ident::new(format!("rule_invoke_{}", rule.name))

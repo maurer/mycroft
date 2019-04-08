@@ -1,7 +1,8 @@
-#![feature(proc_macro)]
 #![feature(test)]
 extern crate mycroft;
+#[macro_use]
 extern crate mycroft_macros;
+extern crate log;
 extern crate mycroft_support;
 extern crate rand;
 extern crate test;
@@ -19,7 +20,7 @@ R(usize, usize)
 );
 
 fn triangle_n(n: usize, b: &mut Bencher) {
-    use mycroft_program::{Database, P, Q, R};
+    use crate::mycroft_program::{Database, P, Q, R};
     let mut db = Database::new();
     for _ in 0..n {
         db.insert_p(P {

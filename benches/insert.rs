@@ -1,6 +1,7 @@
-#![feature(proc_macro)]
 #![feature(test)]
+extern crate log;
 extern crate mycroft;
+#[macro_use]
 extern crate mycroft_macros;
 extern crate mycroft_support;
 extern crate rand;
@@ -12,7 +13,7 @@ use test::Bencher;
 mycroft_program!("P(usize)");
 
 fn insert_n(n: usize, b: &mut Bencher) {
-    use mycroft_program::{Database, P};
+    use crate::mycroft_program::{Database, P};
     let mut rng = Vec::new();
     for _ in 0..n {
         rng.push(rand::random());

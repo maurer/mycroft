@@ -1,15 +1,15 @@
 //! Defines types and utility wrappers for merging multiple pieces of data together
+use crate::storage;
 use std::hash::Hash;
-use std::rc::Rc;
 use std::marker::PhantomData;
-use storage;
+use std::rc::Rc;
 
 /// The base aggregation trait. It is intentionally not parameterized over type so that Tuple
 /// operation remains fully generic.
 pub trait Aggregator {
     /// This is an associative, commutative function over points in some dataspace.
     /// Accepting more than two points is a hack to allow allocation skipping
-    fn aggregate(&self, &[usize]) -> usize;
+    fn aggregate(&self, ids: &[usize]) -> usize;
     /// Clone, jammed into the trait to avoid multitrait problems
     fn agg_clone(&self) -> Box<Aggregator>;
 }
@@ -33,16 +33,19 @@ impl<T, F: Fn(&[T]) -> T> Func<F, T> {
 
 macro_rules! castable_aggregator {
     ($ty:ty) => {
-impl<F: Fn(&[$ty]) -> $ty + 'static> Aggregator for Func<F, $ty> {
-    fn aggregate(&self, big_ks: &[usize]) -> usize {
-        let ks: Vec<_> = big_ks.iter().map(|x| *x as $ty).collect();
-        (self.f)(&ks) as usize
-    }
-    fn agg_clone(&self) -> Box<Aggregator> {
-        Box::new(Self { f: self.f.clone(), phantom: PhantomData})
-    }
-}
-}
+        impl<F: Fn(&[$ty]) -> $ty + 'static> Aggregator for Func<F, $ty> {
+            fn aggregate(&self, big_ks: &[usize]) -> usize {
+                let ks: Vec<_> = big_ks.iter().map(|x| *x as $ty).collect();
+                (self.f)(&ks) as usize
+            }
+            fn agg_clone(&self) -> Box<Aggregator> {
+                Box::new(Self {
+                    f: self.f.clone(),
+                    phantom: PhantomData,
+                })
+            }
+        }
+    };
 }
 
 impl<F: Fn(&[bool]) -> bool + 'static> Aggregator for Func<F, bool> {

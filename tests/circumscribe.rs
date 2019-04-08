@@ -1,9 +1,4 @@
-#[macro_use]
-extern crate log;
-extern crate mycroft;
-#[macro_use]
-extern crate mycroft_macros;
-extern crate mycroft_support;
+use mycroft_macros::mycroft_program;
 
 fn u8_plus(xs: &[u8]) -> u8 {
     let mut out = 0;
@@ -25,7 +20,7 @@ advance_ten: Bar(~(1)) <- ~Foo(~(10))
 
 #[test]
 fn circ_invalidate() {
-    use mycroft_program::{Database, Foo, GetBarResult};
+    use crate::mycroft_program::{Database, Foo, GetBarResult};
     let mut db = Database::new();
     assert_eq!(db.query_get_bar(), vec![]);
     db.insert_foo(Foo { arg0: 3 });

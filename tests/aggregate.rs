@@ -1,8 +1,4 @@
-extern crate log;
-extern crate mycroft;
-#[macro_use]
-extern crate mycroft_macros;
-extern crate mycroft_support;
+use mycroft_macros::mycroft_program;
 
 type Vu16 = Vec<u16>;
 
@@ -34,7 +30,7 @@ Bar(Vu16^vu16_append)
 
 #[test]
 fn insert_aggregate_u8() {
-    use mycroft_program::{Database, Foo, GetFooResult};
+    use crate::mycroft_program::{Database, Foo, GetFooResult};
     let mut db = Database::new();
     assert_eq!(db.query_get_foo(), vec![]);
     db.insert_foo(Foo { arg0: 3 });
@@ -44,7 +40,7 @@ fn insert_aggregate_u8() {
 
 #[test]
 fn insert_aggregate_vu16() {
-    use mycroft_program::{Bar, Database, GetBarResult};
+    use crate::mycroft_program::{Bar, Database, GetBarResult};
     let mut db = Database::new();
     assert_eq!(db.query_get_bar(), vec![]);
     db.insert_bar(Bar {
@@ -55,10 +51,8 @@ fn insert_aggregate_vu16() {
     });
     assert_eq!(
         db.query_get_bar(),
-        vec![
-            GetBarResult {
-                out: vec![1, 2, 3, 4, 5, 8],
-            },
-        ]
+        vec![GetBarResult {
+            out: vec![1, 2, 3, 4, 5, 8],
+        },]
     );
 }

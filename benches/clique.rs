@@ -1,6 +1,9 @@
-#![feature(proc_macro, test)]
+#![feature(test)]
 extern crate mycroft;
+#[macro_use]
 extern crate mycroft_macros;
+#[macro_use]
+extern crate log;
 extern crate mycroft_support;
 extern crate test;
 
@@ -19,7 +22,7 @@ clique: same_clique(x, y) <- reachable(x, y) & reachable(y, x)
 );
 
 fn clique_n(n: u64, b: &mut Bencher) {
-    use mycroft_program::{Database, Edge};
+    use crate::mycroft_program::{Database, Edge};
     b.iter(|| {
         let mut db = Database::new();
         for i in 0..n {

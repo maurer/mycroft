@@ -103,9 +103,9 @@ pub struct Predicate {
 
 impl Predicate {
     /// Transforms predicate AST into predicate IR
-    pub fn from_ast(ast_pred: ast::Predicate) -> Self {
-        let name = ast_pred.name.clone();
-        let (names, types, aggs) = match ast_pred.fields {
+    pub fn from_ast(ast: ast::Predicate) -> Self {
+        let name = ast.name.clone();
+        let (names, types, aggs) = match ast.fields {
             ast::Fields::Ordered(ref vals) => {
                 let mut types = Vec::new();
                 let mut aggs = Vec::new();
@@ -130,11 +130,11 @@ impl Predicate {
             }
         };
         Predicate {
-            name: name,
-            ast: ast_pred,
-            names: names,
-            types: types,
-            aggs: aggs,
+            name,
+            ast,
+            names,
+            types,
+            aggs,
         }
     }
 }
@@ -249,7 +249,8 @@ impl Rule {
                                     Box::new(ast),
                                     v.clone(),
                                     query.types[v].clone(),
-                                ).into());
+                                )
+                                .into());
                             }
                             MatchVal::Var(var)
                         }
@@ -264,7 +265,7 @@ impl Rule {
                     }
                 }
                 ast::Match::Unbound => {
-                    return Err(ErrorKind::UnboundHeadField(Box::new(ast)).into())
+                    return Err(ErrorKind::UnboundHeadField(Box::new(ast)).into());
                 }
             });
         }
@@ -273,12 +274,12 @@ impl Rule {
             stage: ast.stage,
             name: ast.name.clone(),
             func: ast.func.clone(),
-            func_vars: func_vars,
-            func_types: func_types,
-            ast: ast,
+            func_vars,
+            func_types,
+            ast,
             body_query: query_name,
-            head_pred: head_pred,
-            head_vals: head_vals,
+            head_pred,
+            head_vals,
         })
     }
 }
@@ -310,7 +311,8 @@ fn idx_form<T: Clone>(pred: &Predicate, fields: &ast::Fields<T>) -> Result<Vec<(
                 // This ugly bit of code just finds the index of the name present in the named
                 // field in the predicate. It's encoded as a 1 or 0 element vector based on whether
                 // it was found.
-                let fields: Vec<_> = pred.names
+                let fields: Vec<_> = pred
+                    .names
                     .iter()
                     .map(|ns| {
                         ns.iter()
@@ -365,7 +367,8 @@ impl Query {
                 return Err(ErrorKind::QueryUndefinedPredicate(
                     Box::new(ast),
                     clause.pred_name.clone(),
-                ).into());
+                )
+                .into());
             }
             predicates.push(clause.pred_name.clone());
             circumscribed.push(clause.circumscribed);
@@ -389,7 +392,8 @@ impl Query {
                                 s.clone(),
                                 var_type.clone(),
                                 qf_type.clone(),
-                            ).into());
+                            )
+                            .into());
                         }
                         pre_unify.entry(s.clone()).or_insert_with(Vec::new).push(qf);
                     }
@@ -477,14 +481,14 @@ impl Query {
         }
 
         Ok(Query {
-            name: name,
-            ast: ast,
-            predicates: predicates,
-            vars: vars,
-            matches: matches,
-            circumscribed: circumscribed,
-            types: types,
-            gao: gao,
+            name,
+            ast,
+            predicates,
+            vars,
+            matches,
+            circumscribed,
+            types,
+            gao,
         })
     }
 }
@@ -540,9 +544,9 @@ impl Program {
         }
 
         Ok(Program {
-            predicates: predicates,
-            queries: queries,
-            rules: rules,
+            predicates,
+            queries,
+            rules,
         })
     }
 }

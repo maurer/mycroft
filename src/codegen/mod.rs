@@ -34,7 +34,7 @@ fn snakize(s: &str) -> String {
         match c {
             c if !c.is_alphanumeric() => case = false,
             c if c.is_uppercase() && !case => {
-                if out_chars.len() != 0 {
+                if out_chars.is_empty() {
                     out_chars.push('_');
                 }
                 out_chars.extend(c.to_lowercase());
@@ -159,7 +159,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             let mut build_aggs = Vec::new();
             for (idx, agg) in pred.aggs.iter().enumerate() {
                 match agg {
-                    &Some(ref agg_func) => {
+                    Some(ref agg_func) => {
                         let agg_name = Ident::new(agg_func.to_string());
                         let type_ = &pred.types[idx];
                         if typed::is_small(type_) {
@@ -173,7 +173,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                             })
                         }
                     }
-                    &None => build_aggs.push(quote! { aggs.push(None) }),
+                    None => build_aggs.push(quote! { aggs.push(None) }),
                 }
             }
             quote! {
@@ -223,7 +223,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         for rule in prog.rules.values() {
             meta_rules
                 .entry(rule.stage)
-                .or_insert(Vec::new())
+                .or_insert_with(Vec::new)
                 .push(rule)
         }
         let mut meta_names: Vec<Ident> = Vec::new();

@@ -1,11 +1,12 @@
 // The parser! macro spews unbound matches, so disable the lint in this file
-#![cfg_attr(feature = "cargo-clippy", allow(unneeded_field_pattern))]
 //! Provides parsing functions for the Mycroft language.
+#![allow(clippy::unneeded_field_pattern)]
 use ast::*;
-use combine::{any, between, many, not_followed_by, optional, parser, skip_many, try, Parser,
-              many1, sep_by1};
 use combine::char::{char, digit, letter, newline, spaces, string};
 use combine::primitives::{Consumed, Stream};
+use combine::{
+    any, between, many, many1, not_followed_by, optional, parser, sep_by1, skip_many, try, Parser,
+};
 
 /// This is not for general use, it's public due to a quirk of the parser! macro
 /// `AnyStmt` is a wrapper type around all AST statements to allow parsing in arbitrary orders.
@@ -344,12 +345,10 @@ mod test {
             predicates: vec![
                 Predicate {
                     name: "bar".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "bang".to_string(),
-                            aggregator: None,
-                        },
-                    ]),
+                    fields: Fields::Ordered(vec![FieldType {
+                        type_: "bang".to_string(),
+                        aggregator: None,
+                    }]),
                 },
                 Predicate {
                     name: "baz".to_string(),
@@ -385,29 +384,21 @@ mod test {
             ?bars: bar(x)
         "#;
         let query_prog = Program {
-            predicates: vec![
-                Predicate {
-                    name: "bar".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "bang".to_string(),
-                            aggregator: None,
-                        },
-                    ]),
-                },
-            ],
-            queries: vec![
-                Query {
-                    name: "bars".to_string(),
-                    clauses: vec![
-                        Clause {
-                            pred_name: "bar".to_string(),
-                            matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
-                            circumscribed: false,
-                        },
-                    ],
-                },
-            ],
+            predicates: vec![Predicate {
+                name: "bar".to_string(),
+                fields: Fields::Ordered(vec![FieldType {
+                    type_: "bang".to_string(),
+                    aggregator: None,
+                }]),
+            }],
+            queries: vec![Query {
+                name: "bars".to_string(),
+                clauses: vec![Clause {
+                    pred_name: "bar".to_string(),
+                    matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
+                    circumscribed: false,
+                }],
+            }],
             rules: vec![],
         };
         assert_eq!(Ok((query_prog, "")), program().parse(query_prog_code));
@@ -426,57 +417,49 @@ mod test {
             predicates: vec![
                 Predicate {
                     name: "bar".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "bang".to_string(),
-                            aggregator: None,
-                        },
-                    ]),
+                    fields: Fields::Ordered(vec![FieldType {
+                        type_: "bang".to_string(),
+                        aggregator: None,
+                    }]),
                 },
                 Predicate {
                     name: "baz".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "bang".to_string(),
-                            aggregator: None,
-                        },
-                    ]),
+                    fields: Fields::Ordered(vec![FieldType {
+                        type_: "bang".to_string(),
+                        aggregator: None,
+                    }]),
                 },
                 Predicate {
                     name: "out".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "usize".to_string(),
-                            aggregator: None,
-                        },
-                    ]),
+                    fields: Fields::Ordered(vec![FieldType {
+                        type_: "usize".to_string(),
+                        aggregator: None,
+                    }]),
                 },
             ],
             queries: vec![],
-            rules: vec![
-                Rule {
-                    stage: None,
-                    name: "eq_sig".to_string(),
-                    head: Clause {
-                        pred_name: "out".to_string(),
-                        matches: Fields::Ordered(vec![Match::Const("THREE".to_string())]),
+            rules: vec![Rule {
+                stage: None,
+                name: "eq_sig".to_string(),
+                head: Clause {
+                    pred_name: "out".to_string(),
+                    matches: Fields::Ordered(vec![Match::Const("THREE".to_string())]),
+                    circumscribed: false,
+                },
+                body: vec![
+                    Clause {
+                        pred_name: "bar".to_string(),
+                        matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
                         circumscribed: false,
                     },
-                    body: vec![
-                        Clause {
-                            pred_name: "bar".to_string(),
-                            matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
-                            circumscribed: false,
-                        },
-                        Clause {
-                            pred_name: "baz".to_string(),
-                            matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
-                            circumscribed: false,
-                        },
-                    ],
-                    func: None,
-                },
-            ],
+                    Clause {
+                        pred_name: "baz".to_string(),
+                        matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
+                        circumscribed: false,
+                    },
+                ],
+                func: None,
+            }],
         };
         assert_eq!(Ok((prog, "")), program().parse(code));
     }
@@ -493,57 +476,49 @@ mod test {
             predicates: vec![
                 Predicate {
                     name: "bar".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "bang".to_string(),
-                            aggregator: None,
-                        },
-                    ]),
+                    fields: Fields::Ordered(vec![FieldType {
+                        type_: "bang".to_string(),
+                        aggregator: None,
+                    }]),
                 },
                 Predicate {
                     name: "baz".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "bang".to_string(),
-                            aggregator: None,
-                        },
-                    ]),
+                    fields: Fields::Ordered(vec![FieldType {
+                        type_: "bang".to_string(),
+                        aggregator: None,
+                    }]),
                 },
                 Predicate {
                     name: "out".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "usize".to_string(),
-                            aggregator: None,
-                        },
-                    ]),
+                    fields: Fields::Ordered(vec![FieldType {
+                        type_: "usize".to_string(),
+                        aggregator: None,
+                    }]),
                 },
             ],
             queries: vec![],
-            rules: vec![
-                Rule {
-                    stage: None,
-                    name: "eq_sig".to_string(),
-                    head: Clause {
-                        pred_name: "out".to_string(),
-                        matches: Fields::Ordered(vec![Match::Var("y".to_string())]),
+            rules: vec![Rule {
+                stage: None,
+                name: "eq_sig".to_string(),
+                head: Clause {
+                    pred_name: "out".to_string(),
+                    matches: Fields::Ordered(vec![Match::Var("y".to_string())]),
+                    circumscribed: false,
+                },
+                body: vec![
+                    Clause {
+                        pred_name: "bar".to_string(),
+                        matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
                         circumscribed: false,
                     },
-                    body: vec![
-                        Clause {
-                            pred_name: "bar".to_string(),
-                            matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
-                            circumscribed: false,
-                        },
-                        Clause {
-                            pred_name: "baz".to_string(),
-                            matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
-                            circumscribed: false,
-                        },
-                    ],
-                    func: Some("usizify".to_string()),
-                },
-            ],
+                    Clause {
+                        pred_name: "baz".to_string(),
+                        matches: Fields::Ordered(vec![Match::Var("x".to_string())]),
+                        circumscribed: false,
+                    },
+                ],
+                func: Some("usizify".to_string()),
+            }],
         };
         assert_eq!(Ok((prog, "")), program().parse(code));
     }
@@ -554,17 +529,13 @@ mod test {
             bar(bang^bash)
         "#;
         let agg_prog = Program {
-            predicates: vec![
-                Predicate {
-                    name: "bar".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "bang".to_string(),
-                            aggregator: Some("bash".to_string()),
-                        },
-                    ]),
-                },
-            ],
+            predicates: vec![Predicate {
+                name: "bar".to_string(),
+                fields: Fields::Ordered(vec![FieldType {
+                    type_: "bang".to_string(),
+                    aggregator: Some("bash".to_string()),
+                }]),
+            }],
             rules: Vec::new(),
             queries: Vec::new(),
         };
@@ -578,40 +549,34 @@ mod test {
             ?circ_query: ~bar(v) & bar(v) & ~bar(v)
         "#;
         let prog = Program {
-            predicates: vec![
-                Predicate {
-                    name: "bar".to_string(),
-                    fields: Fields::Ordered(vec![
-                        FieldType {
-                            type_: "bang".to_string(),
-                            aggregator: Some("bash".to_string()),
-                        },
-                    ]),
-                },
-            ],
+            predicates: vec![Predicate {
+                name: "bar".to_string(),
+                fields: Fields::Ordered(vec![FieldType {
+                    type_: "bang".to_string(),
+                    aggregator: Some("bash".to_string()),
+                }]),
+            }],
             rules: Vec::new(),
-            queries: vec![
-                Query {
-                    name: "circ_query".to_string(),
-                    clauses: vec![
-                        Clause {
-                            pred_name: "bar".to_string(),
-                            matches: Fields::Ordered(vec![Match::Var("v".to_string())]),
-                            circumscribed: true,
-                        },
-                        Clause {
-                            pred_name: "bar".to_string(),
-                            matches: Fields::Ordered(vec![Match::Var("v".to_string())]),
-                            circumscribed: false,
-                        },
-                        Clause {
-                            pred_name: "bar".to_string(),
-                            matches: Fields::Ordered(vec![Match::Var("v".to_string())]),
-                            circumscribed: true,
-                        },
-                    ],
-                },
-            ],
+            queries: vec![Query {
+                name: "circ_query".to_string(),
+                clauses: vec![
+                    Clause {
+                        pred_name: "bar".to_string(),
+                        matches: Fields::Ordered(vec![Match::Var("v".to_string())]),
+                        circumscribed: true,
+                    },
+                    Clause {
+                        pred_name: "bar".to_string(),
+                        matches: Fields::Ordered(vec![Match::Var("v".to_string())]),
+                        circumscribed: false,
+                    },
+                    Clause {
+                        pred_name: "bar".to_string(),
+                        matches: Fields::Ordered(vec![Match::Var("v".to_string())]),
+                        circumscribed: true,
+                    },
+                ],
+            }],
         };
         assert_eq!(Ok((prog, "")), program().parse(prog_code));
     }

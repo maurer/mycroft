@@ -1,5 +1,5 @@
-use std::fmt::{Display, Error, Formatter};
 use ast::*;
+use std::fmt::{Display, Error, Formatter};
 
 fn sep_by<T: Display>(sep: &str, mult: &[T], f: &mut Formatter) -> Result<(), Error> {
     for (idx, v) in mult.iter().enumerate() {
@@ -59,9 +59,8 @@ impl Display for Predicate {
 impl Display for FieldType {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(f, "{}", self.type_)?;
-        match self.aggregator {
-            Some(ref agg) => write!(f, "^{}", agg)?,
-            None => (),
+        if let Some(ref agg) = self.aggregator {
+            write!(f, "^{}", agg)?
         }
         Ok(())
     }
@@ -88,9 +87,9 @@ impl Display for Rule {
 impl Display for Program {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         sep_by("\n", &self.predicates, f)?;
-        write!(f, "\n")?;
+        writeln!(f)?;
         sep_by("\n", &self.queries, f)?;
-        write!(f, "\n")?;
+        writeln!(f)?;
         sep_by("\n", &self.rules, f)
     }
 }

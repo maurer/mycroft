@@ -285,6 +285,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     quote! {
        mod mycroft_program {
             #![allow(unused_imports,dead_code,unused_variables,unused_mut,unused_unsafe,missing_docs)]
+            use super::*;
             use mycroft_support::storage::{Tuples, Data, Provenance, MergeRef};
             use mycroft_support::join::{Join, SkipIterator, Field, Restrict};
             use mycroft_support::derivation::{Derivation, RawDerivation, Fact};

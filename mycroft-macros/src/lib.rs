@@ -1,6 +1,5 @@
 //! `mycroft-macros` exports the procedural macro interface to the mycroft compiler.
 //! To use it, invoke `mycroft_program! { "MYCROFT CODE HERE" }` in your library.
-#[macro_use]
 extern crate mycroft_macros_impl;
 #[macro_use]
 extern crate proc_macro_hack;

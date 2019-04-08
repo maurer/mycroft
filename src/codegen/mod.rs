@@ -348,6 +348,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                              base_pred_id: usize,
                              m_mid: Option<usize>,
                              cycle_fid: usize) {
+                    let cycle_fact = Fact {predicate_id: base_pred_id, fact_id: cycle_fid};
                     let mut mids: Vec<_> = m_mid.into_iter().map(|x| (base_pred_id, x)).collect();
                     let mut fids = Vec::new();
                     while !mids.is_empty() || !fids.is_empty() {
@@ -355,11 +356,22 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                             let (pred_id, mid) = mids.pop().unwrap();
                             if let Some(influenced) = self.midfids.remove(&(pred_id, mid)) {
                                 for target in influenced {
-                                    let (mfid, mmid) = self.tuple_by_id_mut(target.predicate_id)
-                                                           .purge_mid_prov(target.fact_id,
-                                                                           pred_id,
-                                                                           mid,
-                                                                           rule_slot_to_pred);
+                                    if cycle_fact == target {
+                                        // call/cc
+                                        let new_mid = {
+                                            let target_tuple = self.tuple_by_id_mut(target.predicate_id);
+                                            let new_mid = target_tuple.fid_meta(cycle_fid);
+                                            target_tuple.swap_mid_prov(cycle_fid, pred_id, mid, new_mid, rule_slot_to_pred);
+                                            new_mid
+                                        };
+                                        debug_assert!(!self.midfids.contains_key(&(pred_id, new_mid)));
+                                        self.midfids.insert((pred_id, new_mid), vec![cycle_fact.clone()]);
+                                    }
+                                    let target_tuple = self.tuple_by_id_mut(target.predicate_id);
+                                    let (mfid, mmid) = target_tuple.purge_mid_prov(target.fact_id,
+                                                                                   pred_id,
+                                                                                   mid,
+                                                                                   rule_slot_to_pred);
                                     if let Some(new_mid) = mmid {
                                         mids.push((target.predicate_id, new_mid));
                                     }
@@ -371,8 +383,11 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                         }
                         while !fids.is_empty() {
                             let (pred_id, fid) = fids.pop().unwrap();
-                            assert_ne!((pred_id, fid), (base_pred_id, cycle_fid));
                             let fact = Fact {predicate_id: pred_id, fact_id: fid};
+                            if cycle_fact == fact {
+                                // call/cc
+                                continue;
+                            }
                             if let Some(influenced) = self.fidfids.remove(&fact) {
                                 for target in influenced {
                                     let (mfid, mmid) = self

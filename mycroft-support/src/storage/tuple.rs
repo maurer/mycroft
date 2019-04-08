@@ -134,6 +134,43 @@ impl Provenance {
             }
         }
     }
+    fn rep_mid<F: Fn(usize, usize) -> usize>(
+        &self,
+        pred_id: usize,
+        old_mid: MetaId,
+        new_mid: MetaId,
+        f: F,
+    ) -> Self {
+        match *self {
+            Provenance::Base => Provenance::Base,
+            Provenance::Rule {
+                rule_id,
+                ref premises,
+            } => {
+                let mut new_premises = Vec::new();
+                for (col, premise) in premises.iter().enumerate() {
+                    if f(rule_id, col) == pred_id {
+                        match *premise {
+                            MergeRef::MetaId(mid) => {
+                                if mid == old_mid {
+                                    new_premises.push(MergeRef::MetaId(new_mid));
+                                } else {
+                                    new_premises.push(premise.clone())
+                                }
+                            }
+                            _ => new_premises.push(premise.clone()),
+                        }
+                    } else {
+                        new_premises.push(premise.clone())
+                    }
+                }
+                Provenance::Rule {
+                    rule_id,
+                    premises: new_premises,
+                }
+            }
+        }
+    }
     fn uses_mid<F: Fn(usize, usize) -> usize>(&self, pred_id: usize, mid: MetaId, f: F) -> bool {
         match *self {
             Provenance::Base => false,
@@ -259,6 +296,12 @@ fn get_unchecked(inner: &Vec<Vec<usize>>, key: FactId) -> Vec<usize> {
 impl Tuples {
     fn forced(&self) -> bool {
         self.delayed.is_empty()
+    }
+    /// Make a meta ref as though we had circumscriptively matched
+    pub fn fid_meta(&mut self, fid: usize) -> usize {
+        let key_tuple = permute(&self.key_indices, &self.get(fid));
+        let fids = self.agg_map[&key_tuple].fids.clone();
+        self.make_meta(&fids)
     }
     /// Take all the delayed tuples and update the indices.
     /// Must be called prior to requesting a projection
@@ -454,6 +497,23 @@ impl Tuples {
             }
         }
     }
+    /// Swaps out a meta ID in the provenance of a given fact.
+    /// Used for call/cc
+    pub fn swap_mid_prov<F: Fn(usize, usize) -> usize>(
+        &mut self,
+        fid: FactId,
+        pred_id: usize,
+        old_mid: MetaId,
+        new_mid: MetaId,
+        f: F,
+    ) {
+        self.provenance[fid] = self.provenance[fid]
+            .iter()
+            .cloned()
+            .map(|p| p.rep_mid(pred_id, old_mid, new_mid, &f))
+            .collect();
+    }
+
     /// Cleanses a fact's derivations of references to a MetaId
     pub fn purge_mid_prov<F: Fn(usize, usize) -> usize>(
         &mut self,

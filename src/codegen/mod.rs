@@ -3,13 +3,13 @@
 //! data structures and APIs to provide.
 use ir;
 use quote;
-use syn::{Ident, IntTy, Lit, StrStyle};
 use std::collections::BTreeMap;
+use syn::{Ident, IntTy, Lit, StrStyle};
 
-mod typed;
-mod query;
 mod predicate;
+mod query;
 mod rule;
+mod typed;
 
 fn camelize(s: &str) -> String {
     let mut out_chars = Vec::new();
@@ -53,13 +53,15 @@ fn snakize(s: &str) -> String {
 pub fn program(prog: &ir::Program) -> quote::Tokens {
     use std::collections::BTreeSet;
     // Declarations of predicate fact structs
-    let pred_fact_decls = prog.predicates
+    let pred_fact_decls = prog
+        .predicates
         .values()
         .enumerate()
         .map(|(i, f)| predicate::fact(i, f))
         .collect::<Vec<_>>();
     // Inserter functions for fact structs
-    let pred_inserts = prog.predicates
+    let pred_inserts = prog
+        .predicates
         .values()
         .map(predicate::insert)
         .collect::<Vec<_>>();
@@ -75,13 +77,15 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         query_registrations.push(gen.init)
     }
 
-    let rule_funcs = prog.rules
+    let rule_funcs = prog
+        .rules
         .values()
         .enumerate()
         .map(|(rule_id, rule)| rule::gen(rule_id, rule))
         .collect::<Vec<_>>();
 
-    let pred_names = prog.predicates
+    let pred_names = prog
+        .predicates
         .values()
         .map(|pred| predicate::names::tuple(&pred.name))
         .collect::<Vec<_>>();
@@ -102,7 +106,8 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         pred_name_to_id.insert(name, pid);
     }
 
-    let rule_preds = prog.rules
+    let rule_preds = prog
+        .rules
         .values()
         .enumerate()
         .map(|(rule_id, rule)| {
@@ -140,13 +145,15 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     // Make a place for queries to keep their runtime data (mailbox numbers, a copy of their
     // restrict so that they don't have to build it over and over)
-    let query_storage_names = prog.queries
+    let query_storage_names = prog
+        .queries
         .values()
         .map(query::names::store)
         .collect::<Vec<_>>();
     let query_storage_names2 = query_storage_names.clone();
 
-    let arities = prog.predicates
+    let arities = prog
+        .predicates
         .values()
         .map(|pred| {
             let mut build_aggs = Vec::new();
@@ -182,13 +189,15 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
 
     // Map from constant name to constant type
     let mut consts: BTreeMap<String, String> = BTreeMap::new();
-    for (k, type_) in prog.queries
+    for (k, type_) in prog
+        .queries
         .values()
         .flat_map(|query| query::consts(query, &prog.predicates))
     {
         consts.insert(k, type_);
     }
-    for (k, type_) in prog.rules
+    for (k, type_) in prog
+        .rules
         .values()
         .flat_map(|rule| rule::consts(rule, &prog.predicates))
     {
@@ -226,7 +235,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             };
             meta_names.push(name.clone());
             let rule_invokes: Vec<_> = rules.into_iter().map(rule::names::rule_invoke).collect();
-            meta_defs.push(quote!{
+            meta_defs.push(quote! {
                 pub fn #name(&mut self, start: &Instant, timeout: &Option<Duration>) -> Vec<Fact> {
                     let mut productive = Vec::new();
                     #(if let Some(ref timeout_duration) = *timeout {
@@ -242,12 +251,14 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
         (meta_names, meta_defs)
     };
 
-    let rule_decls = prog.rules
+    let rule_decls = prog
+        .rules
         .values()
         .map(rule::result_type)
         .collect::<Vec<_>>();
 
-    let fact_names: Vec<Ident> = prog.predicates
+    let fact_names: Vec<Ident> = prog
+        .predicates
         .values()
         .map(predicate::names::fact)
         .collect();

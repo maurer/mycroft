@@ -1,12 +1,12 @@
 //! `tuples` contains structures related to an in-memory tuple-store for `usize` values.
 //! It is intended to be used in conjunction with `storage::Data` to provid arbitrary-typed tuple
 //! functionality.
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::collections::btree_map;
-use std::collections::hash_map;
+use aggregator::Aggregator;
 use index::hash::{CheckIndex, HashIndex};
 use join::SkipIterator;
-use aggregator::Aggregator;
+use std::collections::btree_map;
+use std::collections::hash_map;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 type Tuple = Vec<usize>;
 
@@ -122,9 +122,11 @@ impl Provenance {
                     if f(rule_id, col) == pred_id {
                         match *premise {
                             MergeRef::MetaId(_) => continue,
-                            MergeRef::FactIds(ref fids) => if fids.contains(&fid) {
-                                return true;
-                            },
+                            MergeRef::FactIds(ref fids) => {
+                                if fids.contains(&fid) {
+                                    return true;
+                                }
+                            }
                         }
                     }
                 }
@@ -142,9 +144,11 @@ impl Provenance {
                 for (col, premise) in premises.iter().enumerate() {
                     if f(rule_id, col) == pred_id {
                         match *premise {
-                            MergeRef::MetaId(mid2) => if mid == mid2 {
-                                return true;
-                            },
+                            MergeRef::MetaId(mid2) => {
+                                if mid == mid2 {
+                                    return true;
+                                }
+                            }
                             MergeRef::FactIds(_) => continue,
                         }
                     }

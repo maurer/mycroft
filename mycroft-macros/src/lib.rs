@@ -22,12 +22,15 @@ fn input_explanation<T, R>(_: R) -> T {
 /// Transforms a mycroft program into a module by invoking the mycroft compiler.
 #[proc_macro]
 pub fn mycroft_program(input: TokenStream) -> TokenStream {
-    let expr = syn::parse_expr(&input.to_string()).unwrap_or_else(input_explanation);
-    let prog_str = match expr.node {
-        syn::ExprKind::Lit(syn::Lit::Str(s, _)) => s,
+    let expr: syn::Expr = syn::parse_str(&input.to_string()).unwrap_or_else(input_explanation);
+    let prog_str = match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(s),
+            ..
+        }) => s,
         _ => input_explanation(()),
     };
-    compile(prog_str.as_str())
+    compile(prog_str.value().as_str())
 }
 
 fn input_explanation_file<T>(s: String) -> T {
@@ -44,9 +47,12 @@ pub fn mycroft_files(input: TokenStream) -> TokenStream {
         .to_string()
         .split(',')
         .map(|file_name_str| {
-            let expr = syn::parse_expr(file_name_str).unwrap_or_else(input_explanation_file);
-            let file_name = match expr.node {
-                syn::ExprKind::Lit(syn::Lit::Str(s, _)) => s,
+            let expr: syn::Expr = syn::parse_str(&file_name_str).unwrap();
+            let file_name = match expr {
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) => s.value(),
                 e => input_explanation_file(format!("{:?}", e)),
             };
             let mut fd = File::open(&file_name).expect(&format!(

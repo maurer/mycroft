@@ -2,14 +2,19 @@
 //! It would be difficult to avoid generating code due to type-level decisions in terms of what
 //! data structures and APIs to provide.
 use crate::ir;
+use proc_macro2::{Span, TokenStream};
 use quote;
 use std::collections::BTreeMap;
-use syn::{Ident, IntTy, Lit, StrStyle};
+use syn::{Ident, IntSuffix, Lit, LitInt, LitStr};
 
 mod predicate;
 mod query;
 mod rule;
 mod typed;
+
+fn ident_new(name: String) -> Ident {
+    Ident::new(&name, Span::call_site())
+}
 
 fn camelize(s: &str) -> String {
     let mut out_chars = Vec::new();
@@ -50,7 +55,7 @@ fn snakize(s: &str) -> String {
 }
 
 /// Transforms a complete Mycroft program in IR form into code to include in a user program
-pub fn program(prog: &ir::Program) -> quote::Tokens {
+pub fn program(prog: &ir::Program) -> proc_macro2::TokenStream {
     use std::collections::BTreeSet;
     // Declarations of predicate fact structs
     let pred_fact_decls = prog
@@ -96,7 +101,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     let pred_ids = pred_names
         .iter()
         .enumerate()
-        .map(|(pid, _)| Lit::Int(pid as u64, IntTy::Usize))
+        .map(|(pid, _)| Lit::Int(LitInt::new(pid as u64, IntSuffix::Usize, Span::call_site())))
         .collect::<Vec<_>>();
     let pred_ids2 = pred_ids.clone();
     let pred_ids3 = pred_ids.clone();
@@ -140,7 +145,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     let type_names = type_set
         .into_iter()
         .filter(|type_| !typed::is_small(type_))
-        .map(Ident::new)
+        .map(ident_new)
         .collect::<Vec<_>>();
 
     // Make a place for queries to keep their runtime data (mailbox numbers, a copy of their
@@ -160,7 +165,7 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
             for (idx, agg) in pred.aggs.iter().enumerate() {
                 match agg {
                     Some(ref agg_func) => {
-                        let agg_name = Ident::new(agg_func.to_string());
+                        let agg_name = ident_new(agg_func.to_string());
                         let type_ = &pred.types[idx];
                         if typed::is_small(type_) {
                             build_aggs.push(quote! {
@@ -205,11 +210,10 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     }
 
     let mut k_names: Vec<Ident> = Vec::new();
-    let mut k_inits: Vec<quote::Tokens> = Vec::new();
+    let mut k_inits: Vec<TokenStream> = Vec::new();
     for (k, type_) in consts {
         let k_name = typed::const_name(&k);
-        let k_ident = Ident::new(k);
-        let k_expr = quote! { #k_ident };
+        let k_expr: TokenStream = k.parse().unwrap();
         let k_store = typed::store(&type_, &k_expr);
         k_names.push(k_name.clone());
         k_inits.push(quote! {
@@ -227,11 +231,11 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
                 .push(rule)
         }
         let mut meta_names: Vec<Ident> = Vec::new();
-        let mut meta_defs: Vec<quote::Tokens> = Vec::new();
+        let mut meta_defs: Vec<TokenStream> = Vec::new();
         for (stage, rules) in meta_rules {
             let name = match stage {
-                None => Ident::new("run_rules_default".to_string()),
-                Some(stage) => Ident::new(format!("run_rules_stage_{}", stage)),
+                None => ident_new("run_rules_default".to_string()),
+                Some(stage) => ident_new(format!("run_rules_stage_{}", stage)),
             };
             meta_names.push(name.clone());
             let rule_invokes: Vec<_> = rules.into_iter().map(rule::names::rule_invoke).collect();
@@ -269,15 +273,23 @@ pub fn program(prog: &ir::Program) -> quote::Tokens {
     let mut pred_name_strs = Vec::new();
     let mut pred_id_ks = Vec::new();
     for (i, s) in prog.predicates.keys().enumerate() {
-        pred_name_strs.push(Lit::Str(s.clone(), StrStyle::Cooked));
-        pred_id_ks.push(Lit::Int(i as u64, IntTy::Usize));
+        pred_name_strs.push(Lit::Str(LitStr::new(s, Span::call_site())));
+        pred_id_ks.push(Lit::Int(LitInt::new(
+            i as u64,
+            IntSuffix::Usize,
+            Span::call_site(),
+        )));
     }
 
     let mut rule_name_strs = Vec::new();
     let mut rule_id_ks = Vec::new();
     for (i, s) in prog.rules.keys().enumerate() {
-        rule_name_strs.push(Lit::Str(s.clone(), StrStyle::Cooked));
-        rule_id_ks.push(Lit::Int(i as u64, IntTy::Usize));
+        rule_name_strs.push(Lit::Str(LitStr::new(s, Span::call_site())));
+        rule_id_ks.push(Lit::Int(LitInt::new(
+            i as u64,
+            IntSuffix::Usize,
+            Span::call_site(),
+        )));
     }
 
     // TODO add naming feature for program so that mycroft can be invoked multiple times

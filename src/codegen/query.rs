@@ -1,43 +1,44 @@
+use super::{ident_new, predicate, typed};
 use crate::ir;
-use syn::{Ident, IntTy, Lit};
+use proc_macro2::{Span, TokenStream};
 use quote;
-use super::{predicate, typed};
 use std::collections::BTreeMap;
+use syn::{IntSuffix, Lit, LitInt};
 
 pub mod names {
+    use super::super::predicate;
+    use crate::codegen::{camelize, ident_new};
     use crate::ir;
     use syn::Ident;
-    use super::super::predicate;
-    use crate::codegen::camelize;
 
     // Name of query local storage
     pub fn store(query: &ir::Query) -> Ident {
-        Ident::new(format!("query_storage_{}", query.name.to_lowercase()))
+        ident_new(format!("query_storage_{}", query.name.to_lowercase()))
     }
 
     // Name of the full query function
     pub fn func(query: &ir::Query) -> Ident {
-        Ident::new(format!("query_{}", query.name.to_lowercase()))
+        ident_new(format!("query_{}", query.name.to_lowercase()))
     }
 
     // Name of the incremental query function
     pub fn incr_func(query: &ir::Query) -> Ident {
-        Ident::new(format!("query_incr_{}", query.name.to_lowercase()))
+        ident_new(format!("query_incr_{}", query.name.to_lowercase()))
     }
 
     // Name of the incremental function producing tuples rather than facts
     pub fn incr_tuple(query_name: &str) -> Ident {
-        Ident::new(format!("query_incr_tuple_{}", query_name.to_lowercase()))
+        ident_new(format!("query_incr_tuple_{}", query_name.to_lowercase()))
     }
 
     // Name of the query's result type
     pub fn result(query: &ir::Query) -> Ident {
-        Ident::new(format!("{}Result", camelize(&query.name)))
+        ident_new(format!("{}Result", camelize(&query.name)))
     }
 
     // Name of the query's borrowed result type
     pub fn result_borrow(name: &str) -> Ident {
-        Ident::new(format!("{}View", camelize(name)))
+        ident_new(format!("{}View", camelize(name)))
     }
 
     // Name of the tuple storages needed for this query
@@ -51,52 +52,52 @@ pub mod names {
 
     // Local variable name for projection (id = which pred)
     pub fn proj(id: usize) -> Ident {
-        Ident::new(format!("proj_{}", id))
+        ident_new(format!("proj_{}", id))
     }
 
     // Local variable name for an iterator (id = which pred)
     pub fn idx(id: usize) -> Ident {
-        Ident::new(format!("iter_{}", id))
+        ident_new(format!("iter_{}", id))
     }
 
     // Local variable name for a subjoin's mailbox iterator (id = which pred)
     pub fn subjoin_mailbox(id: usize) -> Ident {
-        Ident::new(format!("subjoin_mailbox_{}", id))
+        ident_new(format!("subjoin_mailbox_{}", id))
     }
 
     // Local variable name for a subjoin's mailbox projection (id = which pred)
     pub fn subjoin_proj(id: usize) -> Ident {
-        Ident::new(format!("subjoin_proj_{}", id))
+        ident_new(format!("subjoin_proj_{}", id))
     }
 
     // Local variable name for a subjoin (id = which pred was mailboxed)
     pub fn subjoin(id: usize) -> Ident {
-        Ident::new(format!("subjoin_{}", id))
+        ident_new(format!("subjoin_{}", id))
     }
 
     // Local variable name for a subjoin's indices (id = which pred was mailboxed)
     pub fn subjoin_indices(id: usize) -> Ident {
-        Ident::new(format!("subjoin_indices_{}", id))
+        ident_new(format!("subjoin_indices_{}", id))
     }
 
     // Local variable name for a subjoin index (id = which pred was mailboxed, sub = which pred
     // this index is of)
     pub fn subjoin_idx(id: usize, sub: usize) -> Ident {
-        Ident::new(format!("subjoin_idx_{}_{}", id, sub))
+        ident_new(format!("subjoin_idx_{}_{}", id, sub))
     }
 }
 
 pub struct QueryOut {
     // Put this in new()
-    pub init: quote::Tokens,
+    pub init: TokenStream,
     // Put this in the impl
-    pub impls: quote::Tokens,
+    pub impls: TokenStream,
     // Put this at module scope
-    pub decls: quote::Tokens,
+    pub decls: TokenStream,
 }
 
 // Generates all the projections for the predicates used in the query
-fn build_projs(query: &ir::Query) -> (quote::Tokens, Vec<quote::Tokens>) {
+fn build_projs(query: &ir::Query) -> (TokenStream, Vec<TokenStream>) {
     let mut proj_nums = Vec::new();
     let mut do_forces = Vec::new();
     let mut seen_preds = Vec::new();
@@ -105,8 +106,9 @@ fn build_projs(query: &ir::Query) -> (quote::Tokens, Vec<quote::Tokens>) {
         .iter()
         .enumerate()
         .map(|(pred_id, sub)| {
-            let raw_nums = sub.iter()
-                .map(|n| Lit::Int(*n as u64, IntTy::Usize))
+            let raw_nums = sub
+                .iter()
+                .map(|n| Lit::Int(LitInt::new(*n as u64, IntSuffix::Usize, Span::call_site())))
                 .collect::<Vec<_>>();
             let nums = quote! { &[#(#raw_nums),*] };
             proj_nums.push(nums.clone());
@@ -134,7 +136,7 @@ fn build_projs(query: &ir::Query) -> (quote::Tokens, Vec<quote::Tokens>) {
 }
 
 // Assuming the projections have been generated, generates indexes for the query
-fn build_idxs(query: &ir::Query) -> quote::Tokens {
+fn build_idxs(query: &ir::Query) -> TokenStream {
     let build_idxs = query
         .gao
         .iter()
@@ -153,14 +155,14 @@ fn build_idxs(query: &ir::Query) -> quote::Tokens {
 }
 
 // Generates an expression which evaluates to the restricts value for the intended join
-fn restricts(query: &ir::Query) -> quote::Tokens {
+fn restricts(query: &ir::Query) -> TokenStream {
     let mut restricts = Vec::new();
     for row in &query.matches {
         let mut row_out = Vec::new();
         for mr in row {
             match *mr {
                 Some(ir::MatchVal::Var(ref v)) => {
-                    let var = Lit::Int(*v as u64, IntTy::Usize);
+                    let var = Lit::Int(LitInt::new(*v as u64, IntSuffix::Usize, Span::call_site()));
                     row_out.push(quote! {
                         Some(Restrict::Unify(#var))
                     })
@@ -182,7 +184,7 @@ fn restricts(query: &ir::Query) -> quote::Tokens {
 }
 
 // Generates the structs + from_tuple for our result types
-fn decls(query: &ir::Query) -> quote::Tokens {
+fn decls(query: &ir::Query) -> TokenStream {
     // TODO result_borrow is not fully enforcing the rules it should - if you deconstruct the
     // result_borrow, taking its fields, and then release it, you can have invalid references.
     // This can be fixed by making field access be done through functions, but:
@@ -200,9 +202,9 @@ fn decls(query: &ir::Query) -> quote::Tokens {
     let mut types = Vec::new();
     let mut loads = Vec::new();
     for (idx, var) in query.vars.iter().enumerate() {
-        vars.push(Ident::new(var.clone()));
+        vars.push(ident_new(var.clone()));
         let type_ = &query.types[var];
-        types.push(Ident::new(type_.clone()));
+        types.push(ident_new(type_.clone()));
         loads.push(typed::load(type_, idx));
     }
     let vars2 = vars.clone();
@@ -216,8 +218,8 @@ fn decls(query: &ir::Query) -> quote::Tokens {
     let mut type_counts = BTreeMap::new();
     for var in &query.vars {
         let type_ = &query.types[var];
-        let var_name = Ident::new(var.clone());
-        let type_name = Ident::new(type_.clone());
+        let var_name = ident_new(var.clone());
+        let type_name = ident_new(type_.clone());
         if typed::is_small(type_) {
             small_vars.push(var_name);
             small_types.push(type_name);
@@ -280,7 +282,7 @@ fn decls(query: &ir::Query) -> quote::Tokens {
 
 // Makes push statements for the variable "indices" for all the normal skipiterators
 // Used for full query only
-fn gen_push_indices(query: &ir::Query) -> quote::Tokens {
+fn gen_push_indices(query: &ir::Query) -> TokenStream {
     let iter_is = query
         .gao
         .iter()
@@ -293,7 +295,7 @@ fn gen_push_indices(query: &ir::Query) -> quote::Tokens {
 }
 
 // Make the full query
-fn gen_query(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
+fn gen_query(query: &ir::Query) -> (TokenStream, TokenStream) {
     let result = names::result(query);
     let result2 = result.clone();
 
@@ -326,7 +328,7 @@ fn gen_query(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
 // Push the indices for the incremental query for the given predicate
 // Targets subjoin_indices(pred_id), and uses the mailbox for the pred_id index rather than a
 // normal one.
-fn gen_push_incr_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
+fn gen_push_incr_indices(query: &ir::Query, pred_id: usize) -> TokenStream {
     let mut push_idxs = Vec::new();
     {
         for sub in 0..query.predicates.len() {
@@ -350,7 +352,7 @@ fn gen_push_incr_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
 }
 
 // Builds the subjoin indices, assuming that the mailbox + normal projections exist
-fn gen_subjoin_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
+fn gen_subjoin_indices(query: &ir::Query, pred_id: usize) -> TokenStream {
     let mut build_subjoin_idxs = Vec::new();
     for sub in 0..query.predicates.len() {
         if pred_id == sub {
@@ -368,7 +370,7 @@ fn gen_subjoin_indices(query: &ir::Query, pred_id: usize) -> quote::Tokens {
 }
 
 // Builds the incremental query
-fn gen_incr(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
+fn gen_incr(query: &ir::Query) -> (TokenStream, TokenStream) {
     let query_result = names::result(query);
     let query_result2 = query_result.clone();
 
@@ -411,7 +413,7 @@ fn gen_incr(query: &ir::Query) -> (quote::Tokens, quote::Tokens) {
             let build_subjoin_idxs = gen_subjoin_indices(query, idx);
             let push_idxs = gen_push_incr_indices(query, idx);
 
-            let idx = Lit::Int(idx as u64, IntTy::Usize);
+            let idx = Lit::Int(LitInt::new(idx as u64, IntSuffix::Usize, Span::call_site()));
 
             build_subproj.push(quote! {
                 let #subjoin_proj_name =

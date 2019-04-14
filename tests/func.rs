@@ -1,5 +1,4 @@
 use mycroft_macros::mycroft_program;
-use mycroft_macros_impl::mycroft_program_impl;
 
 const THREE: u32 = 3;
 

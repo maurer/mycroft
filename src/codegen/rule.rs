@@ -1,27 +1,28 @@
+use super::{ident_new, predicate, query, typed};
 use crate::ir;
+use proc_macro2::{Span, TokenStream};
 use quote;
-use syn::{Ident, IntTy, Lit};
 use std::collections::BTreeMap;
-use super::{predicate, query, typed};
+use syn::{IntSuffix, Lit, LitInt};
 
 pub mod names {
+    use crate::codegen::{camelize, ident_new};
     use crate::ir;
     use syn::Ident;
-    use crate::codegen::camelize;
 
     pub fn rule_invoke(rule: &ir::Rule) -> Ident {
-        Ident::new(format!("rule_invoke_{}", rule.name))
+        ident_new(format!("rule_invoke_{}", rule.name))
     }
 
     pub fn func_result(rule: &ir::Rule) -> Ident {
-        Ident::new(format!(
+        ident_new(format!(
             "{}Out",
             camelize(rule.func.as_ref().unwrap().as_str())
         ))
     }
 
     pub fn func_in(rule: &ir::Rule) -> Ident {
-        Ident::new(format!(
+        ident_new(format!(
             "{}In",
             camelize(rule.func.as_ref().unwrap().as_str())
         ))
@@ -40,10 +41,10 @@ pub fn consts(rule: &ir::Rule, preds: &BTreeMap<String, ir::Predicate>) -> Vec<(
     out
 }
 
-pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
+pub fn result_type(rule: &ir::Rule) -> TokenStream {
     // TODO: dedup between this function and Predicate and Query owned results
     if rule.func.is_none() {
-        return quote!{};
+        return quote! {};
     }
     let out_name = names::func_result(rule);
     let out_name2 = out_name.clone();
@@ -59,26 +60,35 @@ pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
     let mut func_vars = Vec::new();
     let mut func_types = Vec::new();
     for (var, type_) in func_out_sig {
-        func_vars.push(Ident::new(var.clone()));
-        func_types.push(Ident::new(type_.clone()));
+        func_vars.push(ident_new(var.clone()));
+        func_types.push(ident_new(type_.clone()));
     }
 
     let mut stores = Vec::new();
 
-    for (index, (type_, field_name)) in rule.func_types
+    for (index, (type_, field_name)) in rule
+        .func_types
         .iter()
         .zip(rule.func_vars.iter())
         .enumerate()
     {
-        let field_id = Ident::new(field_name.to_string());
+        let field_id = ident_new(field_name.to_string());
         let store = typed::store(type_, &quote! {self.#field_id});
-        let index_lit = Lit::Int(index as u64, IntTy::Usize);
+        let index_lit = Lit::Int(LitInt::new(
+            index as u64,
+            IntSuffix::Usize,
+            Span::call_site(),
+        ));
         stores.push(quote! {
             out[#index_lit] = #store;
         });
     }
 
-    let arity = Lit::Int(func_vars.len() as u64, IntTy::Usize);
+    let arity = Lit::Int(LitInt::new(
+        func_vars.len() as u64,
+        IntSuffix::Usize,
+        Span::call_site(),
+    ));
     let arity2 = arity.clone();
 
     quote! {
@@ -97,10 +107,11 @@ pub fn result_type(rule: &ir::Rule) -> quote::Tokens {
     }
 }
 
-pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
+pub fn gen(rule_id: usize, rule: &ir::Rule) -> TokenStream {
     let pred_id_k = predicate::names::id(&rule.head_pred);
     let pred_id_k2 = pred_id_k.clone();
-    let tuple_subs: Vec<quote::Tokens> = rule.head_vals
+    let tuple_subs: Vec<TokenStream> = rule
+        .head_vals
         .iter()
         .map(|hv| match *hv {
             ir::MatchVal::Const(ref k) => {
@@ -108,7 +119,7 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
                 quote! { self.#k }
             }
             ir::MatchVal::Var(v) => {
-                let v = Lit::Int(v as u64, IntTy::Usize);
+                let v = Lit::Int(LitInt::new(v as u64, IntSuffix::Usize, Span::call_site()));
                 quote! { tuple[#v] }
             }
         })
@@ -149,7 +160,7 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
 
     let tuple_action = match rule.func {
         Some(ref name) => {
-            let func = Ident::new(name.clone());
+            let func = ident_new(name.clone());
             let view = query::names::result_borrow(&rule.body_query);
             quote! {
                 let func_out = #func(&#view::from_tuple(self, tuple.clone()));
@@ -169,7 +180,11 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> quote::Tokens {
         }
     };
 
-    let rule_id_k = Lit::Int(rule_id as u64, IntTy::Usize);
+    let rule_id_k = Lit::Int(LitInt::new(
+        rule_id as u64,
+        IntSuffix::Usize,
+        Span::call_site(),
+    ));
 
     quote! {
         pub fn #rule_invoke_name(&mut self) -> Vec<Fact> {
@@ -193,17 +208,26 @@ pub fn preds(
     rule_id: usize,
     query: &ir::Query,
     pred_name_to_id: &BTreeMap<&str, usize>,
-) -> quote::Tokens {
+) -> TokenStream {
     let mut rule_id_ks = Vec::new();
     let mut col_ks = Vec::new();
     let mut pred_id_ks = Vec::new();
     for (col, pred) in query.predicates.iter().enumerate() {
-        col_ks.push(Lit::Int(col as u64, IntTy::Usize));
-        rule_id_ks.push(Lit::Int(rule_id as u64, IntTy::Usize));
-        pred_id_ks.push(Lit::Int(
+        col_ks.push(Lit::Int(LitInt::new(
+            col as u64,
+            IntSuffix::Usize,
+            Span::call_site(),
+        )));
+        rule_id_ks.push(Lit::Int(LitInt::new(
+            rule_id as u64,
+            IntSuffix::Usize,
+            Span::call_site(),
+        )));
+        pred_id_ks.push(Lit::Int(LitInt::new(
             pred_name_to_id[pred.as_str()] as u64,
-            IntTy::Usize,
-        ));
+            IntSuffix::Usize,
+            Span::call_site(),
+        )));
     }
     quote! {
         #((#rule_id_ks, #col_ks) => #pred_id_ks,)*

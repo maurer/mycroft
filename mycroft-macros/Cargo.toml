@@ -12,6 +12,6 @@ proc-macro = true
 
 [dependencies]
 mycroft = {path = ".."}
-syn = { version = "0.11", features = ["full", "printing", "parsing"] }
+syn = { version = "0.15", features = ["full", "printing", "parsing", "extra-traits"] }
 combine = "2.5"
-quote = "0.4"
+quote = "0.6"

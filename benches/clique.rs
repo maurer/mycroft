@@ -1,10 +1,4 @@
 #![feature(test)]
-extern crate mycroft;
-#[macro_use]
-extern crate mycroft_macros;
-#[macro_use]
-extern crate log;
-extern crate mycroft_support;
 extern crate test;
 
 use mycroft_macros::mycroft_program;

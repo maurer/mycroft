@@ -3,6 +3,7 @@ use crate::ir;
 use proc_macro2::TokenStream;
 use quote;
 use std::collections::BTreeMap;
+use syn::{parse_str, Path};
 
 pub mod names {
     use crate::codegen::{camelize, ident_new};
@@ -148,7 +149,7 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> TokenStream {
 
     let tuple_action = match rule.func {
         Some(ref name) => {
-            let func = ident_new(name.clone());
+            let func: Path = parse_str(name).unwrap();
             let view = query::names::result_borrow(&rule.body_query);
             quote! {
                 let func_out = #func(&#view::from_tuple(self, tuple.clone()));

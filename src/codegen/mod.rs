@@ -5,7 +5,7 @@ use crate::ir;
 use proc_macro2::{Span, TokenStream};
 use quote;
 use std::collections::BTreeMap;
-use syn::{Ident, IntSuffix, Lit, LitInt, LitStr};
+use syn::Ident;
 
 mod predicate;
 mod query;
@@ -101,7 +101,7 @@ pub fn program(prog: &ir::Program) -> proc_macro2::TokenStream {
     let pred_ids = pred_names
         .iter()
         .enumerate()
-        .map(|(pid, _)| Lit::Int(LitInt::new(pid as u64, IntSuffix::Usize, Span::call_site())))
+        .map(|(pid, _)| pid)
         .collect::<Vec<_>>();
     let pred_ids2 = pred_ids.clone();
     let pred_ids3 = pred_ids.clone();
@@ -273,23 +273,15 @@ pub fn program(prog: &ir::Program) -> proc_macro2::TokenStream {
     let mut pred_name_strs = Vec::new();
     let mut pred_id_ks = Vec::new();
     for (i, s) in prog.predicates.keys().enumerate() {
-        pred_name_strs.push(Lit::Str(LitStr::new(s, Span::call_site())));
-        pred_id_ks.push(Lit::Int(LitInt::new(
-            i as u64,
-            IntSuffix::Usize,
-            Span::call_site(),
-        )));
+        pred_name_strs.push(s);
+        pred_id_ks.push(i);
     }
 
     let mut rule_name_strs = Vec::new();
     let mut rule_id_ks = Vec::new();
     for (i, s) in prog.rules.keys().enumerate() {
-        rule_name_strs.push(Lit::Str(LitStr::new(s, Span::call_site())));
-        rule_id_ks.push(Lit::Int(LitInt::new(
-            i as u64,
-            IntSuffix::Usize,
-            Span::call_site(),
-        )));
+        rule_name_strs.push(s);
+        rule_id_ks.push(i);
     }
 
     // TODO add naming feature for program so that mycroft can be invoked multiple times

@@ -1,7 +1,7 @@
 use crate::codegen::{ident_new, snakize};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote;
-use syn::{Ident, IntSuffix, Lit, LitInt};
+use syn::Ident;
 // Whether the type can be cast into a usize rather than using typed storage
 pub fn is_small(type_: &str) -> bool {
     match type_ {
@@ -15,29 +15,19 @@ pub fn is_small(type_: &str) -> bool {
 // Generates an expression to get the typed value from an indexed tuple, assuming the tuple is in
 // the variable 'tuple', and the database in the variable 'db'
 pub fn load(type_: &str, index: usize) -> TokenStream {
-    let index_lit = Lit::Int(LitInt::new(
-        index as u64,
-        IntSuffix::Usize,
-        Span::call_site(),
-    ));
     if type_ == "bool" {
         quote! {
-            tuple[#index_lit] == 1
+            tuple[#index] == 1
         }
     } else if is_small(type_) {
         let out_type = ident_new(type_.to_string());
         quote! {
-            tuple[#index_lit] as #out_type
+            tuple[#index] as #out_type
         }
     } else {
         let data_name = name(type_);
-        let index_lit = Lit::Int(LitInt::new(
-            index as u64,
-            IntSuffix::Usize,
-            Span::call_site(),
-        ));
         quote! {
-            &db.#data_name[tuple[#index_lit]]
+            &db.#data_name[tuple[#index]]
         }
     }
 }

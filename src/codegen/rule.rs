@@ -1,9 +1,8 @@
 use super::{ident_new, predicate, query, typed};
 use crate::ir;
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote;
 use std::collections::BTreeMap;
-use syn::{IntSuffix, Lit, LitInt};
 
 pub mod names {
     use crate::codegen::{camelize, ident_new};
@@ -74,22 +73,12 @@ pub fn result_type(rule: &ir::Rule) -> TokenStream {
     {
         let field_id = ident_new(field_name.to_string());
         let store = typed::store(type_, &quote! {self.#field_id});
-        let index_lit = Lit::Int(LitInt::new(
-            index as u64,
-            IntSuffix::Usize,
-            Span::call_site(),
-        ));
         stores.push(quote! {
-            out[#index_lit] = #store;
+            out[#index] = #store;
         });
     }
 
-    let arity = Lit::Int(LitInt::new(
-        func_vars.len() as u64,
-        IntSuffix::Usize,
-        Span::call_site(),
-    ));
-    let arity2 = arity.clone();
+    let arity = func_vars.len();
 
     quote! {
         pub struct #out_name {
@@ -97,7 +86,7 @@ pub fn result_type(rule: &ir::Rule) -> TokenStream {
         }
         impl #out_name2 {
             fn to_tuple(self, db: &mut Database) -> [usize; #arity] {
-                let mut out = [0; #arity2];
+                let mut out = [0; #arity];
                 #(#stores)*
                 out
             }
@@ -119,7 +108,6 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> TokenStream {
                 quote! { self.#k }
             }
             ir::MatchVal::Var(v) => {
-                let v = Lit::Int(LitInt::new(v as u64, IntSuffix::Usize, Span::call_site()));
                 quote! { tuple[#v] }
             }
         })
@@ -180,12 +168,6 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> TokenStream {
         }
     };
 
-    let rule_id_k = Lit::Int(LitInt::new(
-        rule_id as u64,
-        IntSuffix::Usize,
-        Span::call_site(),
-    ));
-
     quote! {
         pub fn #rule_invoke_name(&mut self) -> Vec<Fact> {
             trace!("Now working on {}", #rule_name);
@@ -193,7 +175,7 @@ pub fn gen(rule_id: usize, rule: &ir::Rule) -> TokenStream {
             let tuples = self.#query_incr_tuple_name();
             for (tuple, fids) in tuples {
                 let p = Provenance::Rule {
-                    rule_id: #rule_id_k,
+                    rule_id: #rule_id,
                     premises: fids
                 };
                 #tuple_action
@@ -213,21 +195,9 @@ pub fn preds(
     let mut col_ks = Vec::new();
     let mut pred_id_ks = Vec::new();
     for (col, pred) in query.predicates.iter().enumerate() {
-        col_ks.push(Lit::Int(LitInt::new(
-            col as u64,
-            IntSuffix::Usize,
-            Span::call_site(),
-        )));
-        rule_id_ks.push(Lit::Int(LitInt::new(
-            rule_id as u64,
-            IntSuffix::Usize,
-            Span::call_site(),
-        )));
-        pred_id_ks.push(Lit::Int(LitInt::new(
-            pred_name_to_id[pred.as_str()] as u64,
-            IntSuffix::Usize,
-            Span::call_site(),
-        )));
+        col_ks.push(col);
+        rule_id_ks.push(rule_id);
+        pred_id_ks.push(pred_name_to_id[pred.as_str()]);
     }
     quote! {
         #((#rule_id_ks, #col_ks) => #pred_id_ks,)*

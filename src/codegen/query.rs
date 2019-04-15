@@ -1,9 +1,8 @@
 use super::{ident_new, predicate, typed};
 use crate::ir;
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote;
 use std::collections::BTreeMap;
-use syn::{IntSuffix, Lit, LitInt};
 
 pub mod names {
     use super::super::predicate;
@@ -106,11 +105,7 @@ fn build_projs(query: &ir::Query) -> (TokenStream, Vec<TokenStream>) {
         .iter()
         .enumerate()
         .map(|(pred_id, sub)| {
-            let raw_nums = sub
-                .iter()
-                .map(|n| Lit::Int(LitInt::new(*n as u64, IntSuffix::Usize, Span::call_site())))
-                .collect::<Vec<_>>();
-            let nums = quote! { &[#(#raw_nums),*] };
+            let nums = quote! { &[#(#sub),*] };
             proj_nums.push(nums.clone());
             let pred_name = predicate::names::tuple(&query.predicates[pred_id]);
             if !seen_preds.contains(&pred_id) {
@@ -161,12 +156,9 @@ fn restricts(query: &ir::Query) -> TokenStream {
         let mut row_out = Vec::new();
         for mr in row {
             match *mr {
-                Some(ir::MatchVal::Var(ref v)) => {
-                    let var = Lit::Int(LitInt::new(*v as u64, IntSuffix::Usize, Span::call_site()));
-                    row_out.push(quote! {
-                        Some(Restrict::Unify(#var))
-                    })
-                }
+                Some(ir::MatchVal::Var(ref var)) => row_out.push(quote! {
+                    Some(Restrict::Unify(#var))
+                }),
                 Some(ir::MatchVal::Const(ref k)) => {
                     let k = typed::const_name(k);
                     row_out.push(quote! {
@@ -412,8 +404,6 @@ fn gen_incr(query: &ir::Query) -> (TokenStream, TokenStream) {
 
             let build_subjoin_idxs = gen_subjoin_indices(query, idx);
             let push_idxs = gen_push_incr_indices(query, idx);
-
-            let idx = Lit::Int(LitInt::new(idx as u64, IntSuffix::Usize, Span::call_site()));
 
             build_subproj.push(quote! {
                 let #subjoin_proj_name =

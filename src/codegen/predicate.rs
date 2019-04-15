@@ -4,10 +4,8 @@
 use super::typed;
 use crate::codegen::ident_new;
 use crate::ir;
-use proc_macro2::Span;
 use quote;
 use std::collections::BTreeMap;
-use syn::{IntSuffix, Lit, LitInt};
 
 pub mod names {
     use crate::codegen::{camelize, ident_new};
@@ -53,11 +51,6 @@ pub fn fact(pred_id: usize, pred: &ir::Predicate) -> proc_macro2::TokenStream {
     let fact_name = names::fact(pred);
     let fact_name2 = fact_name.clone();
     let pred_id_name = names::id(&pred.name);
-    let pred_id_k = Lit::Int(LitInt::new(
-        pred_id as u64,
-        IntSuffix::Usize,
-        Span::call_site(),
-    ));
 
     let field_types = pred
         .types
@@ -69,24 +62,14 @@ pub fn fact(pred_id: usize, pred: &ir::Predicate) -> proc_macro2::TokenStream {
     let field_names = names::fields(pred);
     let field_names2 = field_names.clone();
 
-    let arity = Lit::Int(LitInt::new(
-        pred.types.len() as u64,
-        IntSuffix::Usize,
-        Span::call_site(),
-    ));
-    let arity2 = arity.clone();
+    let arity = pred.types.len();
 
     let mut type_stores = Vec::new();
     {
         for (index, (type_, field_name)) in pred.types.iter().zip(field_names.clone()).enumerate() {
             let store = typed::store(type_, &quote! {self.#field_name});
-            let index_lit = Lit::Int(LitInt::new(
-                index as u64,
-                IntSuffix::Usize,
-                Span::call_site(),
-            ));
             type_stores.push(quote! {
-                out[#index_lit] = #store;
+                out[#index] = #store;
             });
         }
     }
@@ -112,7 +95,7 @@ pub fn fact(pred_id: usize, pred: &ir::Predicate) -> proc_macro2::TokenStream {
         });
     }
     quote! {
-        const #pred_id_name: usize = #pred_id_k;
+        const #pred_id_name: usize = #pred_id;
         #[derive(Debug)]
         pub struct #fact_name {
             #(pub #field_names: #field_types),*
@@ -128,7 +111,7 @@ pub fn fact(pred_id: usize, pred: &ir::Predicate) -> proc_macro2::TokenStream {
                 out
             }
             fn to_tuple(self, db: &mut Database) -> [usize; #arity] {
-                let mut out = [0; #arity2];
+                let mut out = [0; #arity];
                 #(#type_stores)*
                 out
             }

@@ -54,8 +54,41 @@ fn snakize(s: &str) -> String {
     out_chars.into_iter().collect()
 }
 
+fn make_metas(prog: &ir::Program) -> (Vec<Ident>, Vec<TokenStream>) {
+    let mut meta_rules: BTreeMap<Option<usize>, Vec<&ir::Rule>> = BTreeMap::new();
+    for rule in prog.rules.values() {
+        meta_rules
+            .entry(rule.stage)
+            .or_insert_with(Vec::new)
+            .push(rule)
+    }
+    let mut meta_names: Vec<Ident> = Vec::new();
+    let mut meta_defs: Vec<TokenStream> = Vec::new();
+    for (stage, rules) in meta_rules {
+        let name = match stage {
+            None => ident_new("run_rules_default".to_string()),
+            Some(stage) => ident_new(format!("run_rules_stage_{}", stage)),
+        };
+        meta_names.push(name.clone());
+        let rule_invokes: Vec<_> = rules.into_iter().map(rule::names::rule_invoke).collect();
+        meta_defs.push(quote! {
+            pub fn #name(&mut self, start: &Instant, timeout: &Option<Duration>) -> Vec<Fact> {
+                let mut productive = Vec::new();
+                #(if let Some(ref timeout_duration) = *timeout {
+                      if *timeout_duration > start.elapsed() {
+                          return productive;
+                      }
+                  }
+                  productive.extend(&self.#rule_invokes());)*
+                productive
+            }
+        });
+    }
+    (meta_names, meta_defs)
+}
+
 /// Transforms a complete Mycroft program in IR form into code to include in a user program
-pub fn program(prog: &ir::Program) -> proc_macro2::TokenStream {
+pub fn program(prog: &ir::Program) -> TokenStream {
     use std::collections::BTreeSet;
     // Declarations of predicate fact structs
     let pred_fact_decls = prog
@@ -222,39 +255,7 @@ pub fn program(prog: &ir::Program) -> proc_macro2::TokenStream {
     }
     let k_names2 = k_names.clone();
 
-    let (meta_invokes, meta_defs) = {
-        let mut meta_rules: BTreeMap<Option<usize>, Vec<&ir::Rule>> = BTreeMap::new();
-        for rule in prog.rules.values() {
-            meta_rules
-                .entry(rule.stage)
-                .or_insert_with(Vec::new)
-                .push(rule)
-        }
-        let mut meta_names: Vec<Ident> = Vec::new();
-        let mut meta_defs: Vec<TokenStream> = Vec::new();
-        for (stage, rules) in meta_rules {
-            let name = match stage {
-                None => ident_new("run_rules_default".to_string()),
-                Some(stage) => ident_new(format!("run_rules_stage_{}", stage)),
-            };
-            meta_names.push(name.clone());
-            let rule_invokes: Vec<_> = rules.into_iter().map(rule::names::rule_invoke).collect();
-            meta_defs.push(quote! {
-                pub fn #name(&mut self, start: &Instant, timeout: &Option<Duration>) -> Vec<Fact> {
-                    let mut productive = Vec::new();
-                    #(if let Some(ref timeout_duration) = *timeout {
-                          if *timeout_duration > start.elapsed() {
-                              return productive;
-                          }
-                      }
-                      productive.extend(&self.#rule_invokes());)*
-                    productive
-                }
-            });
-        }
-        (meta_names, meta_defs)
-    };
-
+    let (meta_invokes, meta_defs) = make_metas(&prog);
     let rule_decls = prog
         .rules
         .values()

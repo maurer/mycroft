@@ -228,7 +228,7 @@ fn make_purge_mid_fn() -> TokenStream {
 
 fn make_queries<'a, P: Iterator<Item = &'a ir::Query>>(
     queries: P,
-) -> (Vec<TokenStream>, Vec<TokenStream>, Vec<TokenStream>) {
+) -> (TokenStream, TokenStream, TokenStream) {
     // Declarations of query result structs
     let mut query_structs = Vec::new();
     // Full and partial query functions
@@ -240,7 +240,36 @@ fn make_queries<'a, P: Iterator<Item = &'a ir::Query>>(
         query_funcs.push(gen.impls);
         query_registrations.push(gen.init)
     }
-    (query_structs, query_funcs, query_registrations)
+    (
+        quote! {
+            #(#query_structs)*
+        },
+        quote! {
+            #(#query_funcs)*
+        },
+        quote! {
+            #(#query_registrations)*
+        },
+    )
+}
+
+fn make_db_struct(
+    pred_names: &[Ident],
+    data_type_names: &[Ident],
+    type_names: &[Ident],
+    query_storage_names: &[Ident],
+    k_names: &[Ident],
+) -> TokenStream {
+    quote! {
+        pub struct Database {
+            #(#pred_names: Tuples,)*
+            #(#data_type_names: Data<#type_names>,)*
+            #(#query_storage_names: QueryStorage,)*
+            #(#k_names: usize,)*
+            fidfids: HashMap<Fact, Vec<Fact>>,
+            midfids: HashMap<(usize, usize), Vec<Fact>>,
+        }
+    }
 }
 
 /// Transforms a complete Mycroft program in IR form into code to include in a user program
@@ -259,6 +288,7 @@ pub fn program(prog: &ir::Program) -> TokenStream {
         .values()
         .map(predicate::insert)
         .collect::<Vec<_>>();
+
     let (query_structs, query_funcs, query_registrations) = make_queries(prog.queries.values());
 
     let rule_funcs = prog
@@ -358,21 +388,17 @@ pub fn program(prog: &ir::Program) -> TokenStream {
     let fact_names3 = fact_names.clone();
     let fact_names4 = fact_names.clone();
 
-    let mut pred_name_strs = Vec::new();
-    let mut pred_id_ks = Vec::new();
-    for (i, s) in prog.predicates.keys().enumerate() {
-        pred_name_strs.push(s);
-        pred_id_ks.push(i);
-    }
-
-    let mut rule_name_strs = Vec::new();
-    let mut rule_id_ks = Vec::new();
-    for (i, s) in prog.rules.keys().enumerate() {
-        rule_name_strs.push(s);
-        rule_id_ks.push(i);
-    }
+    let (pred_id_ks, pred_name_strs): (Vec<_>, Vec<_>) = prog.predicates.keys().enumerate().unzip();
+    let (rule_id_ks, rule_name_strs): (Vec<_>, Vec<_>) = prog.rules.keys().enumerate().unzip();
 
     let purge_mid_fn = make_purge_mid_fn();
+    let db_struct = make_db_struct(
+        &pred_names,
+        &data_type_names,
+        &type_names,
+        &query_storage_names,
+        &k_names,
+    );
 
     // TODO add naming feature for program so that mycroft can be invoked multiple times
     // in the same module.
@@ -391,16 +417,9 @@ pub fn program(prog: &ir::Program) -> TokenStream {
                 mailboxes: Vec<usize>,
                 restricts: Vec<Vec<Option<Restrict>>>,
             }
-            pub struct Database {
-                #(#pred_names: Tuples,)*
-                #(#data_type_names: Data<#type_names>,)*
-                #(#query_storage_names: QueryStorage,)*
-                #(#k_names: usize,)*
-                fidfids: HashMap<Fact, Vec<Fact>>,
-                midfids: HashMap<(usize, usize), Vec<Fact>>,
-            }
+            #db_struct
             #(#pred_fact_decls)*
-            #(#query_structs)*
+            #query_structs
             #(#rule_decls)*
             #[derive(Debug)]
             pub enum AnyFact {

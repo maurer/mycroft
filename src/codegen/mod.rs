@@ -226,6 +226,23 @@ fn make_purge_mid_fn() -> TokenStream {
     }
 }
 
+fn make_queries<'a, P: Iterator<Item = &'a ir::Query>>(
+    queries: P,
+) -> (Vec<TokenStream>, Vec<TokenStream>, Vec<TokenStream>) {
+    // Declarations of query result structs
+    let mut query_structs = Vec::new();
+    // Full and partial query functions
+    let mut query_funcs = Vec::new();
+    // Database initializaiton to make sure indices are present
+    let mut query_registrations = Vec::new();
+    for gen in queries.map(|query| query::gen(query)) {
+        query_structs.push(gen.decls);
+        query_funcs.push(gen.impls);
+        query_registrations.push(gen.init)
+    }
+    (query_structs, query_funcs, query_registrations)
+}
+
 /// Transforms a complete Mycroft program in IR form into code to include in a user program
 pub fn program(prog: &ir::Program) -> TokenStream {
     use std::collections::BTreeSet;
@@ -242,17 +259,7 @@ pub fn program(prog: &ir::Program) -> TokenStream {
         .values()
         .map(predicate::insert)
         .collect::<Vec<_>>();
-    // Declarations of query result structs
-    let mut query_structs = Vec::new();
-    // Full and partial query functions
-    let mut query_funcs = Vec::new();
-    // Database initializaiton to make sure indices are present
-    let mut query_registrations = Vec::new();
-    for gen in prog.queries.values().map(|query| query::gen(query)) {
-        query_structs.push(gen.decls);
-        query_funcs.push(gen.impls);
-        query_registrations.push(gen.init)
-    }
+    let (query_structs, query_funcs, query_registrations) = make_queries(prog.queries.values());
 
     let rule_funcs = prog
         .rules

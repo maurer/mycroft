@@ -285,10 +285,12 @@ pub fn program(prog: &ir::Program) -> TokenStream {
     let pred_ids2 = pred_ids.clone();
     let pred_ids3 = pred_ids.clone();
 
-    let mut pred_name_to_id: BTreeMap<&str, usize> = BTreeMap::new();
-    for (pid, name) in prog.predicates.keys().enumerate() {
-        pred_name_to_id.insert(name, pid);
-    }
+    let pred_name_to_id: BTreeMap<&str, usize> = prog
+        .predicates
+        .keys()
+        .enumerate()
+        .map(|(pid, name)| (name.as_str(), pid))
+        .collect();
 
     let rule_preds = prog
         .rules
@@ -304,12 +306,12 @@ pub fn program(prog: &ir::Program) -> TokenStream {
         .collect::<Vec<_>>();
 
     // Collecting types to figure out what typed storage is needed
-    let mut type_set = BTreeSet::new();
-    for pred in prog.predicates.values() {
-        for type_ in &pred.types {
-            type_set.insert(type_.clone());
-        }
-    }
+    let type_set: BTreeSet<&str> = prog
+        .predicates
+        .values()
+        .flat_map(|pred| pred.types.iter())
+        .map(String::as_str)
+        .collect();
 
     // Name all typed storage which isn't small (those don't need it)
     let data_type_names = type_set

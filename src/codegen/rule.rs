@@ -11,18 +11,18 @@ pub mod names {
     use syn::Ident;
 
     pub fn rule_invoke(rule: &ir::Rule) -> Ident {
-        ident_new(format!("rule_invoke_{}", rule.name))
+        ident_new(&format!("rule_invoke_{}", rule.name))
     }
 
     pub fn func_result(rule: &ir::Rule) -> Ident {
-        ident_new(format!(
+        ident_new(&format!(
             "{}Out",
             camelize(rule.func.as_ref().unwrap().as_str())
         ))
     }
 
     pub fn func_in(rule: &ir::Rule) -> Ident {
-        ident_new(format!(
+        ident_new(&format!(
             "{}In",
             camelize(rule.func.as_ref().unwrap().as_str())
         ))
@@ -60,8 +60,8 @@ pub fn result_type(rule: &ir::Rule) -> TokenStream {
     let mut func_vars = Vec::new();
     let mut func_types = Vec::new();
     for (var, type_) in func_out_sig {
-        func_vars.push(ident_new(var.clone()));
-        func_types.push(ident_new(type_.clone()));
+        func_vars.push(ident_new(var));
+        func_types.push(ident_new(type_));
     }
 
     let mut stores = Vec::new();
@@ -72,7 +72,7 @@ pub fn result_type(rule: &ir::Rule) -> TokenStream {
         .zip(rule.func_vars.iter())
         .enumerate()
     {
-        let field_id = ident_new(field_name.to_string());
+        let field_id = ident_new(field_name);
         let store = typed::store(type_, &quote! {self.#field_id});
         stores.push(quote! {
             out[#index] = #store;

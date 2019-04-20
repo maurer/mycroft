@@ -12,8 +12,8 @@ mod query;
 mod rule;
 mod typed;
 
-fn ident_new(name: String) -> Ident {
-    Ident::new(&name, Span::call_site())
+fn ident_new(name: &str) -> Ident {
+    Ident::new(name, Span::call_site())
 }
 
 fn camelize(s: &str) -> String {
@@ -66,8 +66,8 @@ fn make_metas(prog: &ir::Program) -> (Vec<Ident>, Vec<TokenStream>) {
     let mut meta_defs: Vec<TokenStream> = Vec::new();
     for (stage, rules) in meta_rules {
         let name = match stage {
-            None => ident_new("run_rules_default".to_string()),
-            Some(stage) => ident_new(format!("run_rules_stage_{}", stage)),
+            None => ident_new("run_rules_default"),
+            Some(stage) => ident_new(&format!("run_rules_stage_{}", stage)),
         };
         meta_names.push(name.clone());
         let rule_invokes: Vec<_> = rules.into_iter().map(rule::names::rule_invoke).collect();
@@ -94,7 +94,7 @@ fn make_arities<'a, P: Iterator<Item = &'a ir::Predicate>>(predicates: P) -> Vec
             for (idx, agg) in pred.aggs.iter().enumerate() {
                 match agg {
                     Some(ref agg_func) => {
-                        let agg_name = ident_new(agg_func.to_string());
+                        let agg_name = ident_new(agg_func);
                         let type_ = &pred.types[idx];
                         if typed::is_small(type_) {
                             build_aggs.push(quote! {

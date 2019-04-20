@@ -20,7 +20,7 @@ pub fn load(type_: &str, index: usize) -> TokenStream {
             tuple[#index] == 1
         }
     } else if is_small(type_) {
-        let out_type = ident_new(type_.to_string());
+        let out_type = ident_new(type_);
         quote! {
             tuple[#index] as #out_type
         }
@@ -49,10 +49,10 @@ pub fn store(type_: &str, expr: &TokenStream) -> TokenStream {
 
 // Provides the name of typed storage for a given type
 pub fn name(type_: &str) -> Ident {
-    ident_new(format!("data_{}", snakize(type_)))
+    ident_new(&format!("data_{}", snakize(type_)))
 }
 
 // Gives a standard name to a field to hold the precomputed key for a constant
 pub fn const_name(const_name: &str) -> Ident {
-    ident_new(format!("k_{}", snakize(const_name)))
+    ident_new(&format!("k_{}", snakize(const_name)))
 }

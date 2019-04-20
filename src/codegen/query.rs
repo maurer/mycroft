@@ -12,32 +12,32 @@ pub mod names {
 
     // Name of query local storage
     pub fn store(query: &ir::Query) -> Ident {
-        ident_new(format!("query_storage_{}", query.name.to_lowercase()))
+        ident_new(&format!("query_storage_{}", query.name.to_lowercase()))
     }
 
     // Name of the full query function
     pub fn func(query: &ir::Query) -> Ident {
-        ident_new(format!("query_{}", query.name.to_lowercase()))
+        ident_new(&format!("query_{}", query.name.to_lowercase()))
     }
 
     // Name of the incremental query function
     pub fn incr_func(query: &ir::Query) -> Ident {
-        ident_new(format!("query_incr_{}", query.name.to_lowercase()))
+        ident_new(&format!("query_incr_{}", query.name.to_lowercase()))
     }
 
     // Name of the incremental function producing tuples rather than facts
     pub fn incr_tuple(query_name: &str) -> Ident {
-        ident_new(format!("query_incr_tuple_{}", query_name.to_lowercase()))
+        ident_new(&format!("query_incr_tuple_{}", query_name.to_lowercase()))
     }
 
     // Name of the query's result type
     pub fn result(query: &ir::Query) -> Ident {
-        ident_new(format!("{}Result", camelize(&query.name)))
+        ident_new(&format!("{}Result", camelize(&query.name)))
     }
 
     // Name of the query's borrowed result type
     pub fn result_borrow(name: &str) -> Ident {
-        ident_new(format!("{}View", camelize(name)))
+        ident_new(&format!("{}View", camelize(name)))
     }
 
     // Name of the tuple storages needed for this query
@@ -51,38 +51,38 @@ pub mod names {
 
     // Local variable name for projection (id = which pred)
     pub fn proj(id: usize) -> Ident {
-        ident_new(format!("proj_{}", id))
+        ident_new(&format!("proj_{}", id))
     }
 
     // Local variable name for an iterator (id = which pred)
     pub fn idx(id: usize) -> Ident {
-        ident_new(format!("iter_{}", id))
+        ident_new(&format!("iter_{}", id))
     }
 
     // Local variable name for a subjoin's mailbox iterator (id = which pred)
     pub fn subjoin_mailbox(id: usize) -> Ident {
-        ident_new(format!("subjoin_mailbox_{}", id))
+        ident_new(&format!("subjoin_mailbox_{}", id))
     }
 
     // Local variable name for a subjoin's mailbox projection (id = which pred)
     pub fn subjoin_proj(id: usize) -> Ident {
-        ident_new(format!("subjoin_proj_{}", id))
+        ident_new(&format!("subjoin_proj_{}", id))
     }
 
     // Local variable name for a subjoin (id = which pred was mailboxed)
     pub fn subjoin(id: usize) -> Ident {
-        ident_new(format!("subjoin_{}", id))
+        ident_new(&format!("subjoin_{}", id))
     }
 
     // Local variable name for a subjoin's indices (id = which pred was mailboxed)
     pub fn subjoin_indices(id: usize) -> Ident {
-        ident_new(format!("subjoin_indices_{}", id))
+        ident_new(&format!("subjoin_indices_{}", id))
     }
 
     // Local variable name for a subjoin index (id = which pred was mailboxed, sub = which pred
     // this index is of)
     pub fn subjoin_idx(id: usize, sub: usize) -> Ident {
-        ident_new(format!("subjoin_idx_{}_{}", id, sub))
+        ident_new(&format!("subjoin_idx_{}_{}", id, sub))
     }
 }
 
@@ -194,9 +194,9 @@ fn decls(query: &ir::Query) -> TokenStream {
     let mut types = Vec::new();
     let mut loads = Vec::new();
     for (idx, var) in query.vars.iter().enumerate() {
-        vars.push(ident_new(var.clone()));
+        vars.push(ident_new(var));
         let type_ = &query.types[var];
-        types.push(ident_new(type_.clone()));
+        types.push(ident_new(type_));
         loads.push(typed::load(type_, idx));
     }
     let vars2 = vars.clone();
@@ -210,8 +210,8 @@ fn decls(query: &ir::Query) -> TokenStream {
     let mut type_counts = BTreeMap::new();
     for var in &query.vars {
         let type_ = &query.types[var];
-        let var_name = ident_new(var.clone());
-        let type_name = ident_new(type_.clone());
+        let var_name = ident_new(var);
+        let type_name = ident_new(type_);
         if typed::is_small(type_) {
             small_vars.push(var_name);
             small_types.push(type_name);

@@ -15,34 +15,34 @@ pub mod names {
     // Fields of a predicate, using native names if present, or arg0-argN if not
     pub fn fields(pred: &ir::Predicate) -> Vec<Ident> {
         match pred.names {
-            Some(ref names) => names.iter().cloned().map(ident_new).collect(),
+            Some(ref names) => names.iter().map(|n| ident_new(n)).collect(),
             None => pred
                 .types
                 .iter()
                 .enumerate()
-                .map(|x| ident_new(format!("arg{}", x.0)))
+                .map(|x| ident_new(&format!("arg{}", x.0)))
                 .collect(),
         }
     }
 
     // Name of a predicate's fact type
     pub fn fact(pred: &ir::Predicate) -> Ident {
-        ident_new(camelize(&pred.name))
+        ident_new(&camelize(&pred.name))
     }
 
     // Name of a predicate's insertion function
     pub fn insert(pred: &ir::Predicate) -> Ident {
-        ident_new(format!("insert_{}", pred.name.to_lowercase()))
+        ident_new(&format!("insert_{}", pred.name.to_lowercase()))
     }
 
     // Name of the field where the predicate's tuples are stored
     pub fn tuple(pred_name: &str) -> Ident {
-        ident_new(format!("pred_{}", pred_name.to_lowercase()))
+        ident_new(&format!("pred_{}", pred_name.to_lowercase()))
     }
 
     // Name of the constant where the predicate's ID is stored
     pub fn id(pred_name: &str) -> Ident {
-        ident_new(format!("PRED_ID_{}", pred_name.to_uppercase()))
+        ident_new(&format!("PRED_ID_{}", pred_name.to_uppercase()))
     }
 }
 
@@ -52,12 +52,7 @@ pub fn fact(pred_id: usize, pred: &ir::Predicate) -> proc_macro2::TokenStream {
     let fact_name2 = fact_name.clone();
     let pred_id_name = names::id(&pred.name);
 
-    let field_types = pred
-        .types
-        .iter()
-        .cloned()
-        .map(ident_new)
-        .collect::<Vec<_>>();
+    let field_types = pred.types.iter().map(|n| ident_new(n)).collect::<Vec<_>>();
 
     let field_names = names::fields(pred);
     let field_names2 = field_names.clone();

@@ -87,6 +87,73 @@ fn make_metas(prog: &ir::Program) -> (Vec<Ident>, Vec<TokenStream>) {
     (meta_names, meta_defs)
 }
 
+fn make_arities<'a, P: Iterator<Item = &'a ir::Predicate>>(predicates: P) -> Vec<TokenStream> {
+    predicates
+        .map(|pred| {
+            let mut build_aggs = Vec::new();
+            for (idx, agg) in pred.aggs.iter().enumerate() {
+                match agg {
+                    Some(ref agg_func) => {
+                        let agg_name = ident_new(agg_func.to_string());
+                        let type_ = &pred.types[idx];
+                        if typed::is_small(type_) {
+                            build_aggs.push(quote! {
+                                aggs.push(Some(Box::new(Func::new(#agg_name))))
+                            })
+                        } else {
+                            let data = typed::name(type_);
+                            build_aggs.push(quote! {
+                                aggs.push(Some(Box::new(FuncData::new(#agg_name, #data.clone()))))
+                            })
+                        }
+                    }
+                    None => build_aggs.push(quote! { aggs.push(None) }),
+                }
+            }
+            quote! {
+                {
+                    use mycroft_support::aggregator::{Aggregator, Func, FuncData};
+                    let mut aggs: Vec<Option<Box<Aggregator>>> = Vec::new();
+                    #(#build_aggs;)*
+                    aggs
+                }
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
+fn make_consts(prog: &ir::Program) -> (Vec<Ident>, Vec<TokenStream>) {
+    // Map from constant name to constant type
+    let mut consts: BTreeMap<String, String> = BTreeMap::new();
+    for (k, type_) in prog
+        .queries
+        .values()
+        .flat_map(|query| query::consts(query, &prog.predicates))
+    {
+        consts.insert(k, type_);
+    }
+    for (k, type_) in prog
+        .rules
+        .values()
+        .flat_map(|rule| rule::consts(rule, &prog.predicates))
+    {
+        consts.insert(k, type_);
+    }
+
+    let mut k_names: Vec<Ident> = Vec::new();
+    let mut k_inits: Vec<TokenStream> = Vec::new();
+    for (k, type_) in consts {
+        let k_name = typed::const_name(&k);
+        let k_expr: TokenStream = k.parse().unwrap();
+        let k_store = typed::store(&type_, &k_expr);
+        k_names.push(k_name.clone());
+        k_inits.push(quote! {
+            db.#k_name = #k_store;
+        });
+    }
+    (k_names, k_inits)
+}
+
 /// Transforms a complete Mycroft program in IR form into code to include in a user program
 pub fn program(prog: &ir::Program) -> TokenStream {
     use std::collections::BTreeSet;
@@ -173,7 +240,6 @@ pub fn program(prog: &ir::Program) -> TokenStream {
         .collect::<Vec<_>>();
     let data_type_names2 = data_type_names.clone();
     let data_type_names3 = data_type_names.clone();
-    let data_type_names4 = data_type_names.clone();
 
     let type_names = type_set
         .into_iter()
@@ -190,69 +256,9 @@ pub fn program(prog: &ir::Program) -> TokenStream {
         .collect::<Vec<_>>();
     let query_storage_names2 = query_storage_names.clone();
 
-    let arities = prog
-        .predicates
-        .values()
-        .map(|pred| {
-            let mut build_aggs = Vec::new();
-            for (idx, agg) in pred.aggs.iter().enumerate() {
-                match agg {
-                    Some(ref agg_func) => {
-                        let agg_name = ident_new(agg_func.to_string());
-                        let type_ = &pred.types[idx];
-                        if typed::is_small(type_) {
-                            build_aggs.push(quote! {
-                                aggs.push(Some(Box::new(Func::new(#agg_name))))
-                            })
-                        } else {
-                            let data = typed::name(type_);
-                            build_aggs.push(quote! {
-                                aggs.push(Some(Box::new(FuncData::new(#agg_name, #data.clone()))))
-                            })
-                        }
-                    }
-                    None => build_aggs.push(quote! { aggs.push(None) }),
-                }
-            }
-            quote! {
-                {
-                    use mycroft_support::aggregator::{Aggregator, Func, FuncData};
-                    let mut aggs: Vec<Option<Box<Aggregator>>> = Vec::new();
-                    #(#build_aggs;)*
-                    aggs
-                }
-            }
-        })
-        .collect::<Vec<_>>();
+    let arities = make_arities(prog.predicates.values());
 
-    // Map from constant name to constant type
-    let mut consts: BTreeMap<String, String> = BTreeMap::new();
-    for (k, type_) in prog
-        .queries
-        .values()
-        .flat_map(|query| query::consts(query, &prog.predicates))
-    {
-        consts.insert(k, type_);
-    }
-    for (k, type_) in prog
-        .rules
-        .values()
-        .flat_map(|rule| rule::consts(rule, &prog.predicates))
-    {
-        consts.insert(k, type_);
-    }
-
-    let mut k_names: Vec<Ident> = Vec::new();
-    let mut k_inits: Vec<TokenStream> = Vec::new();
-    for (k, type_) in consts {
-        let k_name = typed::const_name(&k);
-        let k_expr: TokenStream = k.parse().unwrap();
-        let k_store = typed::store(&type_, &k_expr);
-        k_names.push(k_name.clone());
-        k_inits.push(quote! {
-            db.#k_name = #k_store;
-        });
-    }
+    let (k_names, k_inits) = make_consts(&prog);
     let k_names2 = k_names.clone();
 
     let (meta_invokes, meta_defs) = make_metas(&prog);
@@ -340,7 +346,7 @@ pub fn program(prog: &ir::Program) -> TokenStream {
                     #(let #data_type_names2 = Data::new();)*
                     let mut db = Self {
                         #(#pred_names2: Tuples::new(#arities),)*
-                        #(#data_type_names3: #data_type_names4,)*
+                        #(#data_type_names3,)*
                         #(#query_storage_names2: QueryStorage::default(),)*
                         #(#k_names2: std::usize::MAX,)*
                         fidfids: HashMap::new(),
@@ -422,7 +428,7 @@ pub fn program(prog: &ir::Program) -> TokenStream {
                 }
                 fn tuple_by_id_mut(&mut self, key: usize) -> &mut Tuples {
                     match key {
-                        #(#pred_ids3 => &mut self.#pred_names4,)*
+                        #(#pred_ids2 => &mut self.#pred_names4,)*
                         _ => panic!("Internal error, unbound predicate ID")
                     }
                 }
@@ -434,7 +440,7 @@ pub fn program(prog: &ir::Program) -> TokenStream {
                 fn project_fact(&self, f: &Fact) -> AnyFact {
                     let tuple = self.tuple_by_id(f.predicate_id).get(f.fact_id);
                     match f.predicate_id {
-                        #(#pred_ids2 => AnyFact::#fact_names3(
+                        #(#pred_ids3 => AnyFact::#fact_names3(
                                 #fact_names4::from_tuple(self, &tuple)),)*
                         _ => panic!("Internal error, unbound predicate ID in fact projection")
                     }

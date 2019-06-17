@@ -1,8 +1,5 @@
-#![feature(test)]
-extern crate test;
-
+use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use mycroft_macros::mycroft_program;
-use test::Bencher;
 
 mycroft_program!(
     "
@@ -30,15 +27,12 @@ fn triangle_n(n: usize, b: &mut Bencher) {
             arg1: rand::random(),
         });
     }
-    b.iter(|| test::black_box(db.query_triangle()))
+    b.iter(|| black_box(db.query_triangle()))
 }
 
-#[bench]
-fn triangle_1k(b: &mut Bencher) {
-    triangle_n(1_000, b)
+fn triangle_benches(c: &mut Criterion) {
+    c.bench_function_over_inputs("triangle", |b, &&n| triangle_n(n, b), &[1_000, 10_000]);
 }
 
-#[bench]
-fn triangle_10k(b: &mut Bencher) {
-    triangle_n(10_000, b)
-}
+criterion_group!(benches, triangle_benches);
+criterion_main!(benches);

@@ -1,8 +1,5 @@
-#![feature(test)]
-extern crate test;
-
+use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use mycroft_macros::mycroft_program;
-use test::Bencher;
 
 mycroft_program!("P(usize)");
 
@@ -17,21 +14,13 @@ fn insert_n(n: usize, b: &mut Bencher) {
         for n in &rng {
             p.insert_p(P { arg0: *n });
         }
-        test::black_box(p)
+        black_box(p)
     })
 }
 
-#[bench]
-fn insert_1k(b: &mut Bencher) {
-    insert_n(1_000, b)
+fn insert_benches(c: &mut Criterion) {
+    c.bench_function_over_inputs("insert", |b, &&n| insert_n(n, b), &[1_000, 10_000, 100_000]);
 }
 
-#[bench]
-fn insert_10k(b: &mut Bencher) {
-    insert_n(10_000, b)
-}
-
-#[bench]
-fn insert_100k(b: &mut Bencher) {
-    insert_n(100_000, b)
-}
+criterion_group!(benches, insert_benches);
+criterion_main!(benches);

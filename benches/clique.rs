@@ -1,8 +1,5 @@
-#![feature(test)]
-extern crate test;
-
+use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use mycroft_macros::mycroft_program;
-use test::Bencher;
 
 mycroft_program!(
     r#"
@@ -27,56 +24,17 @@ fn clique_n(n: u64, b: &mut Bencher) {
         }
         db.insert_edge(Edge { arg0: n, arg1: 0 });
         db.run_rules();
-        test::black_box(db)
+        black_box(db)
     })
 }
 
-#[bench]
-fn clique_10(b: &mut Bencher) {
-    clique_n(10, b)
+fn clique_benches(c: &mut Criterion) {
+    c.bench_function_over_inputs(
+        "clique",
+        |b, &&n| clique_n(n, b),
+        &[10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+    );
 }
 
-#[bench]
-fn clique_20(b: &mut Bencher) {
-    clique_n(20, b)
-}
-
-#[bench]
-fn clique_30(b: &mut Bencher) {
-    clique_n(30, b)
-}
-
-#[bench]
-fn clique_40(b: &mut Bencher) {
-    clique_n(40, b)
-}
-
-#[bench]
-fn clique_50(b: &mut Bencher) {
-    clique_n(50, b)
-}
-
-#[bench]
-fn clique_60(b: &mut Bencher) {
-    clique_n(60, b)
-}
-
-#[bench]
-fn clique_70(b: &mut Bencher) {
-    clique_n(70, b)
-}
-
-#[bench]
-fn clique_80(b: &mut Bencher) {
-    clique_n(80, b)
-}
-
-#[bench]
-fn clique_90(b: &mut Bencher) {
-    clique_n(90, b)
-}
-
-#[bench]
-fn clique_100(b: &mut Bencher) {
-    clique_n(100, b)
-}
+criterion_group!(benches, clique_benches);
+criterion_main!(benches);

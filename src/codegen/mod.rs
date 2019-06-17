@@ -17,6 +17,9 @@ fn ident_new(name: &str) -> Ident {
 }
 
 fn camelize(s: &str) -> String {
+    if s.starts_with("crate") {
+        return camelize(&s[6..]);
+    }
     let mut out_chars = Vec::new();
     let mut new_word = true;
     for c in s.chars() {
